@@ -1,0 +1,14 @@
+services:
+  llama_app:
+    build:
+      context: ./llama
+    container_name: llama_app
+    ports:
+      - "8100:8100"
+    networks:
+      - app_network
+    restart: always
+
+networks:
+  app_network:
+    name: dataflow_network
