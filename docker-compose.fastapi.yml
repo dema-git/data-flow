@@ -1,0 +1,14 @@
+services:
+  api_app2:
+    build:
+      context: ./fast-api
+    container_name: api_app2
+    ports:
+      - "8000:8000"
+    restart: always
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    name: dataflow_network

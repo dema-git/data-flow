@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+confluent_kafka
+minio
+pandas
+pyarrow
+SQLAlchemy
+psycopg2-binary
