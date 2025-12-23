@@ -1,0 +1,45 @@
+services:
+  kafka:
+    image: bashj79/kafka-kraft:latest
+    container_name: kafka
+    restart: always
+    ports:
+      - "${KAFKA_PORT}:${KAFKA_PORT}"
+    environment:
+      KAFKA_KRAFT_MODE: "true"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_BROKER_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_MESSAGE_MAX_BYTES: 200000000
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 200000000
+      KAFKA_DATA_DIR: /bitnami/kafka/data
+    volumes:
+      - kafka_data:/bitnami/kafka/data
+    networks:
+      - app_network
+
+
+  kafdrop:
+    container_name: kafdrop
+    build:
+      context: .
+      dockerfile: kafdrop/Dockerfile
+    restart: always
+    ports:
+      - "${KAFDROP_PORT}:${KAFDROP_PORT}"
+    environment:
+      KAFKA_BROKERCONNECT: "${KAFKA_BROKERCONNECT}"
+      JVM_OPTS: "-Xms128M -Xmx512M"
+    entrypoint: [ "./wait-for-it.sh", "kafka:9092", "--" ]
+    command: [ "java", "-jar", "kafdrop.jar" ]
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    name: dataflow_network
+
+volumes:
+  kafka_data:
