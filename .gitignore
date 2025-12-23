@@ -1,1 +1,6 @@
 .idea/
+
+# LLama
+llama/__pycache__/
+llama/metaaa-llama-3-8b-instruct.Q4_K_M.gguf
+llama/meta-llama-3-8b-instruct.Q4_K_M.gguf
