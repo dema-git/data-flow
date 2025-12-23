@@ -1,8 +1,8 @@
 services:
-  api_app2:
+  api_app:
     build:
       context: ./fast-api
-    container_name: api_app2
+    container_name: api_app
     ports:
       - "8000:8000"
     restart: always

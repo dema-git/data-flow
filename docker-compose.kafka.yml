@@ -21,7 +21,7 @@ services:
       - app_network
 
 
-  kafdrop:
+  kafdrop2:
     container_name: kafdrop
     build:
       context: .
