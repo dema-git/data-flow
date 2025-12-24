@@ -14,7 +14,7 @@ from confluent_kafka import Producer
 import json
 
 app = FastAPI()
-faker = Faker()
+
 
 conf = {'bootstrap.servers': 'kafka:9092'}
 producer = Producer(conf)
