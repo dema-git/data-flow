@@ -1,0 +1,67 @@
+from dataclasses import dataclass
+from minio import Minio
+from minio.commonconfig import CopySource
+import os
+import logging
+
+@dataclass
+class MinioConfig:
+    host: str = "minio:9010"
+    access_key: str = "admin"
+    secret_key: str = "pass12345@"
+    secure: bool = False
+
+@dataclass
+class MinioManager:
+    config: MinioConfig
+
+    def __post_init__(self):
+        self.client = Minio(
+            self.config.host,
+            access_key=self.config.access_key,
+            secret_key=self.config.secret_key,
+            secure=self.config.secure
+        )
+
+    def ensure_bucket(self, bucket_name: str):
+        if not self.client.bucket_exists(bucket_name):
+            self.client.make_bucket(bucket_name)
+
+    def upload_file(self, bucket_name: str, object_name: str, file_path: str):
+        with open(file_path, "rb") as f:
+            self.client.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=f,
+                length=os.path.getsize(file_path),
+                content_type="application/octet-stream"
+            )
+        print(f"Uploaded {object_name} to bucket {bucket_name}")
+
+    def download_all_objects(self, bucket_name: str, download_path: str = None) -> dict:
+        objects_data = {}
+        for obj in self.client.list_objects(bucket_name, recursive=True):
+            response = None
+            try:
+                response = self.client.get_object(bucket_name, obj.object_name)
+                if download_path:
+                    file_path = os.path.join(download_path, obj.object_name)
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    with open(file_path, "wb") as f:
+                        for chunk in response.stream(32 * 1024):
+                            f.write(chunk)
+                else:
+                    objects_data[obj.object_name] = response.read()
+            finally:
+                if response:
+                    response.close()
+        return objects_data
+
+
+# ------------------------------
+# helper to get ready-to-use manager
+# ------------------------------
+def get_minio_manager(config: MinioConfig = None) -> MinioManager:
+    if config is None:
+        config = MinioConfig()
+    return MinioManager(config)
