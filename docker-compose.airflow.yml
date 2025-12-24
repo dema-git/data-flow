@@ -1,0 +1,108 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.10.2
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__FERNET_KEY: "W1vZQO7U4vq7JjOvn6cs1g3_fA4Y4FxXw4J5y6j0zK8="
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_pgdb:5432/airflow_db
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/scripts:/opt/airflow/scripts
+    - ./logs:/opt/airflow/logs
+  networks:
+    - postgresql_private_net
+
+services:
+  airflow_pgdb:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5443:5432"
+    volumes:
+      - ./init-db:/docker-entrypoint-initdb.d
+      - pgdata_airflow:/var/lib/postgresql/data
+    networks:
+      - postgresql_private_net
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 5s
+      retries: 5
+
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c '
+        echo "Waiting for Postgres...";
+        chmod +x /opt/airflow/scripts/wait-for-it.sh &&
+        /opt/airflow/scripts/wait-for-it.sh "airflow_pgdb:5432"
+      
+        airflow db init &&
+      
+        airflow users create \
+          --username ${AIRFLOW_ADMIN_USERNAME} \
+          --firstname ${AIRFLOW_ADMIN_FIRST_NAME} \
+          --lastname ${AIRFLOW_ADMIN_LAST_NAME} \
+          --role Admin \
+          --email ${AIRFLOW_ADMIN_EMAIL} \
+          --password ${AIRFLOW_ADMIN_PASSWORD} &&
+        touch /opt/airflow/.airflow_initialized
+      '
+    restart: "no"
+    volumes:
+      - ./scripts:/opt/airflow/scripts
+      - airflow_init_flag:/opt/airflow
+
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: >
+      bash -c '
+        chmod +x /opt/airflow/scripts/*.sh &&
+        /opt/airflow/scripts/wait-for-airflow.sh scheduler
+      '
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+      - airflow_init_flag:/opt/airflow
+    restart: always
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: >
+      bash -c '
+        chmod +x /opt/airflow/scripts/*.sh &&
+        /opt/airflow/scripts/wait-for-airflow.sh webserver
+      '
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+      - airflow_init_flag:/opt/airflow
+    networks:
+        - postgresql_private_net
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+volumes:
+  pgdata_airflow:
+  airflow_init_flag:
+
+networks:
+  postgresql_private_net:
+    external: true
+    name: main_network

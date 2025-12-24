@@ -1,4 +1,13 @@
-FROM ubuntu:latest
-LABEL authors="vlad"
+FROM apache/airflow:2.10.2
 
-ENTRYPOINT ["top", "-b"]
+
+USER root
+
+COPY scripts/ /opt/airflow/scripts/
+
+RUN chmod +x /opt/airflow/scripts/*.sh
+
+RUN chown -R airflow: /opt/airflow/scripts/
+
+USER airflow
+WORKDIR /opt/airflow
