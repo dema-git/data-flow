@@ -57,6 +57,23 @@ class MinioManager:
                     response.close()
         return objects_data
 
+    def delete_all_objects(self, bucket_name: str):
+        objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name, recursive=True)]
+        if objects_to_delete:
+            delete_gen = map(lambda name: {"ObjectName": name}, objects_to_delete)
+            self.client.remove_objects(bucket_name, delete_gen)
+            print(f"Deleted all objects from bucket '{bucket_name}'")
+        else:
+            print(f"Bucket '{bucket_name}' is already empty.")
+
+    def move_objects_to_bucket(self, source_bucket: str, target_bucket: str):
+        self.ensure_bucket(target_bucket)
+        for obj in self.client.list_objects(source_bucket, recursive=True):
+            source = CopySource(source_bucket, obj.object_name)
+            result = self.client.copy_object(bucket_name=target_bucket, object_name=obj.object_name, source=source)
+            print(f"Copied '{obj.object_name}' to '{target_bucket}' (version: {result.version_id})")
+            self.client.remove_object(source_bucket, obj.object_name)
+            print(f"Removed '{obj.object_name}' from '{source_bucket}'")
 
 # ------------------------------
 # helper to get ready-to-use manager
