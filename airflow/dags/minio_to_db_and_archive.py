@@ -1,5 +1,5 @@
 ############################################################
-# minio_to_archive_files_task.py
+# minio_to_db_and_archive.py
 #
 # # DAG to fetch files from MinIO, save data to the database,
 # and archive the files every 5 minutes
