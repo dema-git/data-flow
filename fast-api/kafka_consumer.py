@@ -13,6 +13,7 @@
 ##########################################################
 
 from confluent_kafka import Consumer, TopicPartition
+from upload_files_to_minio import upload_batch
 from collections import defaultdict
 import threading
 import json
@@ -79,5 +80,24 @@ def get_messages():
 
     data_batch = [m["data"] for m in batch]
 
+    # Upload batch to MinIO (durable storage)
+    # Offsets must NOT be committed if this step fails
+    upload_batch(data_batch)
+
+    # Collect the highest processed offset per topic-partition
+    offsets = defaultdict(lambda: -1)
+
+    for m in batch:
+        key = (m["topic"], m["partition"])
+        offsets[key] = max(offsets[key], m["offset"])
+
+    # Commit offsets AFTER successful upload
+    # Kafka expects the NEXT offset to be committed
+    tps = [
+        TopicPartition(topic, partition, offset + 1)
+        for (topic, partition), offset in offsets.items()
+    ]
+
+    consumer.commit(offsets=tps)
 
     return data_batch

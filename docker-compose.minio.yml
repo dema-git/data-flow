@@ -18,5 +18,4 @@ services:
 
 networks:
   project_default:
-    external: true
-    name: main_network
+    name: dataflow_network

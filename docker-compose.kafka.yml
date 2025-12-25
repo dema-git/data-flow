@@ -39,6 +39,7 @@ services:
 
 networks:
   app_network:
+    external: true
     name: dataflow_network
 
 volumes:
