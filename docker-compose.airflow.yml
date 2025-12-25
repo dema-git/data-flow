@@ -105,4 +105,4 @@ volumes:
 networks:
   postgresql_private_net:
     external: true
-    name: main_network
+    name: dataflow_network
