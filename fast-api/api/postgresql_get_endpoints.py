@@ -36,12 +36,20 @@ def get_users(skip: int = 0, limit: int = 20):
 
         return {
             "data": {
-                "users": [{"user_id": u.user_id} for u in users],
-                "meta": {
-                    "count": total_users,
-                    "limit": limit,
-                    "offset": skip
-                }
+                "users": [
+                    {
+                        "user_id": u.user_id,
+                        "links": {
+                            "user": f"/users/{u.user_id}",
+                            "sessions": f"/sessions/user/{u.user_id}",
+                        }
+                    }
+                for u in users],
+            },
+            "meta": {
+                "count": total_users,
+                "limit": limit,
+                "offset": skip
             }
         }
 
@@ -62,52 +70,54 @@ def get_user(user_id: int):
         return {
             "data": {
                 "user_id": user.user_id,
-                "meta": {
-                    "total_sessions": total_sessions,
-                    "last_session_ts": last_session_ts
-                },
                 "links":{
                     "sessions": f"/users/{user.user_id}/sessions"
                 }
-            }
+            },
+            "meta": {
+                "total_sessions": total_sessions,
+                "last_session_ts": last_session_ts
+            },
         }
 
 
-@router.get("/users/{user_id}/sessions", summary="Get all sessions of a user")
-def get_user_sessions(user_id: int):
-    with Session(engine) as db:
-        user = db.get(User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        sessions_data = []
-        for s in user.sessions:
-
-            timestamps = [e.timestamp for e in s.events]
-            last_event_ts = max(timestamps) if timestamps else None
-
-            sessions_data.append({
-                "session_id": s.session_id,
-                "browser": s.browser,
-                "device": s.device,
-                "last_event_ts": last_event_ts,
-                "url": f"sessions/{s.session_id}"
-            })
-
-        total_sessions = len(sessions_data)
-        last_session_ts = max(s["last_event_ts"] for s in sessions_data if s["last_event_ts"] is not None) \
-            if sessions_data else None
-
-        return {
-            "data": {
-                "user_id": user.user_id,
-                "sessions": sessions_data,
-                "meta": {
-                    "total_sessions": total_sessions,
-                    "last_session_ts": last_session_ts
-                }
-            }
-        }
+# @router.get("/users/{user_id}/sessions", summary="Get all sessions of a user")
+# def get_user_sessions(user_id: int):
+#     with Session(engine) as db:
+#         user = db.get(User, user_id)
+#         if not user:
+#             raise HTTPException(status_code=404, detail="User not found")
+#
+#         sessions_data = []
+#         for s in user.sessions:
+#
+#             timestamps = [e.timestamp for e in s.events]
+#             last_event_ts = max(timestamps) if timestamps else None
+#
+#             sessions_data.append({
+#                 "session_id": s.session_id,
+#                 "browser": s.browser,
+#                 "device": s.device,
+#                 "last_event_ts": last_event_ts,
+#                 "links": {
+#                     "session": f"sessions/{s.session_id}"
+#                 }
+#             })
+#
+#         total_sessions = len(sessions_data)
+#         last_session_ts = max(s["last_event_ts"] for s in sessions_data if s["last_event_ts"] is not None) \
+#             if sessions_data else None
+#
+#         return {
+#             "data": {
+#                 "user_id": user.user_id,
+#                 "sessions": sessions_data,
+#                 "meta": {
+#                     "total_sessions": total_sessions,
+#                     "last_session_ts": last_session_ts
+#                 }
+#             }
+#         }
 
 
 ################
@@ -117,7 +127,26 @@ def get_user_sessions(user_id: int):
 def get_sessions(skip: int = 0, limit: int = 20):
     with Session(engine) as db:
         sessions = db.execute(select(SessionModel).offset(skip).limit(limit)).scalars().all()
-        return [{"session_id": s.session_id, "user_id": s.user_id} for s in sessions]
+        total_sessions = db.execute(
+            select(func.count()).select_from(SessionModel)
+        ).scalar_one()
+
+        return {
+            "data": {
+                "sessions": [
+                {
+                    "session_id": s.session_id,
+                    "url": f"/sessions/{s.session_id}"
+                }
+                for s in sessions
+                ],
+            },
+            "meta": {
+                "count": total_sessions,
+                "limit": limit,
+                "offset": skip
+            }
+        }
 
 
 @router.get("/sessions/{session_id}", summary="Get session details")
@@ -130,12 +159,29 @@ def get_session(session_id: str):
         session = db.get(SessionModel, sid)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+
+        event_timestamps = [e.timestamp for e in session.events]
+        first_event_ts = min(event_timestamps, default=None)
+        last_event_ts = max(event_timestamps, default=None)
+        total_events = len(event_timestamps)
+
         return {
-            "session_id": session.session_id,
-            "user_id": session.user_id,
-            "browser": session.browser,
-            "device": session.device,
-            "events": [{"event_id": e.event_id, "type": e.type, "timestamp": e.timestamp} for e in session.events]
+            "data": {
+                "session_id": session.session_id,
+                "user_id": session.user_id,
+                "browser": session.browser,
+                "device": session.device,
+                "links": {
+                  "user": f"/users/{session.user_id}",
+                  "events": f"/sessions/{session.session_id}/events"
+                },
+                "events": [{"event_id": e.event_id, "type": e.type, "timestamp": e.timestamp} for e in session.events]
+            },
+            "meta": {
+                "total_events": total_events,
+                "first_event_ts": first_event_ts,
+                "last_event_ts": last_event_ts
+            },
         }
 
 
@@ -145,7 +191,33 @@ def get_sessions_by_user(user_id: int):
         user = db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        return [{"session_id": s.session_id, "browser": s.browser, "device": s.device} for s in user.sessions]
+
+        sessions_data = []
+        last_event_ts_list = []
+
+        for s in user.sessions:
+            last_ts = max((e.timestamp for e in s.events), default=None)
+            if last_ts is not None:
+                last_event_ts_list.append(last_ts)
+
+            sessions_data.append({
+                "session_id": s.session_id,
+                "links": {
+                    "session": f"/sessions/{s.session_id}",
+                    "user": f"/users/{user.user_id}"
+                },
+                "last_event_ts": last_ts
+            })
+
+        return {
+            "data": {
+                "sessions": sessions_data,
+                "meta": {
+                    "total_sessions": len(sessions_data),
+                    "last_event_ts": max(last_event_ts_list) if last_event_ts_list else None
+                }
+            }
+        }
 
 
 ################
