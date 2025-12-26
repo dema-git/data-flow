@@ -110,7 +110,6 @@ def get_user_sessions(user_id: int):
         }
 
 
-
 ################
 # SESSIONS
 ################
@@ -149,6 +148,9 @@ def get_sessions_by_user(user_id: int):
         return [{"session_id": s.session_id, "browser": s.browser, "device": s.device} for s in user.sessions]
 
 
+################
+# EVENTS
+################
 @router.get("/events", summary="Get list of events")
 def get_events(skip: int = 0, limit: int = 50, type: str | None = None):
     with Session(engine) as db:
