@@ -1,3 +1,18 @@
+##############################################################################################
+# postgresql_get_endpoints.py
+#
+# This module defines routes to interact with PostgreSQL models using SQLAlchemy.
+# It provides endpoints to retrieve users, sessions, and events with optional
+# filtering and pagination. The endpoints also include relational data, such as
+# sessions belonging to a user and events belonging to a session or user.
+#
+# Endpoints include:
+# - /users: list all users or get a specific user with sessions
+# - /sessions: list all sessions or get details of a specific session
+# - /events: list all events or get details of a specific event
+# - Additional endpoints for retrieving sessions/events by user or session
+##############################################################################################
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
