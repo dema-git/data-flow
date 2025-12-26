@@ -14,7 +14,7 @@
 ##############################################################################################
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from models import User, Session as SessionModel, Event
 from models import engine
@@ -23,11 +23,27 @@ import uuid
 router = APIRouter(tags=["PostgreSQL"])
 
 
+################
+# USERS
+################
 @router.get("/users", summary="Get list of users")
 def get_users(skip: int = 0, limit: int = 20):
     with Session(engine) as db:
         users = db.execute(select(User).offset(skip).limit(limit)).scalars().all()
-        return [{"user_id": u.user_id} for u in users]
+        total_users = db.execute(
+            select(func.count()).select_from(User)
+        ).scalar_one()
+
+        return {
+            "data": {
+                "users": [{"user_id": u.user_id} for u in users],
+                "meta": {
+                    "count": total_users,
+                    "limit": limit,
+                    "offset": skip
+                }
+            }
+        }
 
 
 @router.get("/users/{user_id}", summary="Get user details")
@@ -36,9 +52,24 @@ def get_user(user_id: int):
         user = db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        total_sessions = len(user.sessions)
+        last_session_ts = max(
+            (max((e.timestamp for e in s.events), default=0) for s in user.sessions),
+            default=None
+        )
+
         return {
-            "user_id": user.user_id,
-            "sessions": [{"session_id": s.session_id} for s in user.sessions]
+            "data": {
+                "user_id": user.user_id,
+                "meta": {
+                    "total_sessions": total_sessions,
+                    "last_session_ts": last_session_ts
+                },
+                "links":{
+                    "sessions": f"/users/{user.user_id}/sessions"
+                }
+            }
         }
 
 
@@ -48,9 +79,41 @@ def get_user_sessions(user_id: int):
         user = db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        return [{"session_id": s.session_id, "browser": s.browser, "device": s.device} for s in user.sessions]
+
+        sessions_data = []
+        for s in user.sessions:
+
+            timestamps = [e.timestamp for e in s.events]
+            last_event_ts = max(timestamps) if timestamps else None
+
+            sessions_data.append({
+                "session_id": s.session_id,
+                "browser": s.browser,
+                "device": s.device,
+                "last_event_ts": last_event_ts,
+                "url": f"sessions/{s.session_id}"
+            })
+
+        total_sessions = len(sessions_data)
+        last_session_ts = max(s["last_event_ts"] for s in sessions_data if s["last_event_ts"] is not None) \
+            if sessions_data else None
+
+        return {
+            "data": {
+                "user_id": user.user_id,
+                "sessions": sessions_data,
+                "meta": {
+                    "total_sessions": total_sessions,
+                    "last_session_ts": last_session_ts
+                }
+            }
+        }
 
 
+
+################
+# SESSIONS
+################
 @router.get("/sessions", summary="Get list of sessions")
 def get_sessions(skip: int = 0, limit: int = 20):
     with Session(engine) as db:
