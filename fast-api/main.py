@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query
 import pandas as pd
+
 from db_utils.helpers import process_records
 from db_utils.database import get_db_session
 from kafka_consumer import start_consumer_loop, get_messages
@@ -21,19 +22,28 @@ app = FastAPI()
 
 start_consumer_loop()
 
-@app.get("/")
+@app.get("/", tags=["Home/Dashboard"])
 def homepage():
     return {"page": "Homepage"}
 
 
-@app.get("/kafka/consumer")
+@app.get("/kafka/consumer", tags=['Integration'],
+         summary="Consume messages from Kafka and store data in MinIO",
+         description="""
+         Consumes a batch of messages from the Kafka queue and persists the processed data to a MinIO bucket.
+         This endpoint is primarily triggered by an Airflow DAG as part of the data pipeline.
+         Manual invocation should be performed **only in exceptional cases**, such as debugging or recovery.
+        
+         WARNING: Manual execution may affect pipeline consistency.
+         """
+         )
 def kafka_consumer():
     batch = get_messages()
     return {"status": "success" ,
             "batch": batch}
 
 
-@app.get("/minino/getallfiles")
+@app.get("/minino/getallfiles", tags=['Integration'])
 def get_files_from_minio_bucket():
     # Get files from MinIO bucket
     files_data = get_files_data('data-bucket')
@@ -45,7 +55,7 @@ def get_files_from_minio_bucket():
     return {"status": "done", "skipped_sessions": skipped}
 
 
-@app.get("/minino/movetoarchive")
+@app.get("/minino/movetoarchive", tags=['Integration'])
 def move_all_files_from_primary_to_archive_bucket():
     move_files_to_another_bucket('data-bucket', 'parquet-bucket')
     return {"status": "success"}
