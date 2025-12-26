@@ -43,7 +43,17 @@ def kafka_consumer():
             "batch": batch}
 
 
-@app.get("/minino/getallfiles", tags=['Integration'])
+@app.get("/minino/getallfiles", tags=['Integration'],
+         summary="Fetch and process all files from MinIO bucket",
+         description="""
+         Fetches all files from the primary MinIO bucket, normalizes the data, 
+         and stores the processed records in PostgreSQL.
+         This endpoint is primarily triggered by an Airflow DAG as part of the data pipeline.
+         Manual invocation should be performed **only in exceptional cases**, such as debugging or recovery.
+
+         ⚠️ Manual execution may affect pipeline consistency and may lead to duplicate or inconsistent records if run out of sequence.
+         """
+         )
 def get_files_from_minio_bucket():
     # Get files from MinIO bucket
     files_data = get_files_data('data-bucket')
@@ -55,7 +65,16 @@ def get_files_from_minio_bucket():
     return {"status": "done", "skipped_sessions": skipped}
 
 
-@app.get("/minino/movetoarchive", tags=['Integration'])
+@app.get("/minino/movetoarchive", tags=['Integration'],
+         summary="Move all files from primary to archive MinIO bucket",
+         description="""
+         Moves all files from the primary MinIO bucket to the archive bucket.
+         This endpoint is primarily triggered by an Airflow DAG as part of the data pipeline.
+         Manual invocation should be performed **only in exceptional cases**, such as debugging or recovery.
+
+         ⚠️ Manual execution may affect pipeline consistency.
+         """
+         )
 def move_all_files_from_primary_to_archive_bucket():
     move_files_to_another_bucket('data-bucket', 'parquet-bucket')
     return {"status": "success"}
