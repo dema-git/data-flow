@@ -20,13 +20,13 @@ from models import User, Session as SessionModel, Event
 from models import engine
 import uuid
 
-router = APIRouter(tags=["PostgreSQL"])
+router = APIRouter()
 
 
 ################
 # USERS
 ################
-@router.get("/users", summary="Get list of users")
+@router.get("/users", summary="Get list of users", tags=["Users"])
 def get_users(skip: int = 0, limit: int = 20):
     with Session(engine) as db:
         users = db.execute(select(User).offset(skip).limit(limit)).scalars().all()
@@ -54,7 +54,7 @@ def get_users(skip: int = 0, limit: int = 20):
         }
 
 
-@router.get("/users/{user_id}", summary="Get user details")
+@router.get("/users/{user_id}", summary="Get user details", tags=["Users"])
 def get_user(user_id: int):
     with Session(engine) as db:
         user = db.get(User, user_id)
@@ -123,7 +123,7 @@ def get_user(user_id: int):
 ################
 # SESSIONS
 ################
-@router.get("/sessions", summary="Get list of sessions")
+@router.get("/sessions", summary="Get list of sessions", tags=["Sessions"])
 def get_sessions(skip: int = 0, limit: int = 20):
     with Session(engine) as db:
         sessions = db.execute(select(SessionModel).offset(skip).limit(limit)).scalars().all()
@@ -149,7 +149,7 @@ def get_sessions(skip: int = 0, limit: int = 20):
         }
 
 
-@router.get("/sessions/{session_id}", summary="Get session details")
+@router.get("/sessions/{session_id}", summary="Get session details", tags=["Sessions"])
 def get_session(session_id: str):
     try:
         sid = uuid.UUID(session_id)
@@ -185,7 +185,7 @@ def get_session(session_id: str):
         }
 
 
-@router.get("/sessions/user/{user_id}", summary="Get sessions by user")
+@router.get("/sessions/user/{user_id}", summary="Get sessions by user", tags=["Sessions"])
 def get_sessions_by_user(user_id: int):
     with Session(engine) as db:
         user = db.get(User, user_id)
@@ -223,7 +223,7 @@ def get_sessions_by_user(user_id: int):
 ################
 # EVENTS
 ################
-@router.get("/events", summary="Get list of events")
+@router.get("/events", summary="Get list of events", tags=["Events"])
 def get_events(skip: int = 0, limit: int = 50, type: str | None = None):
     with Session(engine) as db:
         stmt = select(Event)
@@ -233,7 +233,7 @@ def get_events(skip: int = 0, limit: int = 50, type: str | None = None):
         return [{"event_id": e.event_id, "session_id": e.session_id, "type": e.type, "timestamp": e.timestamp} for e in events]
 
 
-@router.get("/events/{event_id}", summary="Get event details")
+@router.get("/events/{event_id}", summary="Get event details", tags=["Events"])
 def get_event(event_id: int):
     with Session(engine) as db:
         event = db.get(Event, event_id)
@@ -242,7 +242,7 @@ def get_event(event_id: int):
         return {"event_id": event.event_id, "session_id": event.session_id, "type": event.type, "timestamp": event.timestamp}
 
 
-@router.get("/events/session/{session_id}", summary="Get events by session")
+@router.get("/events/session/{session_id}", summary="Get events by session", tags=["Events"])
 def get_events_by_session(session_id: str):
     try:
         sid = uuid.UUID(session_id)
@@ -255,7 +255,7 @@ def get_events_by_session(session_id: str):
         return [{"event_id": e.event_id, "type": e.type, "timestamp": e.timestamp} for e in session.events]
 
 
-@router.get("/events/user/{user_id}", summary="Get events by user")
+@router.get("/events/user/{user_id}", summary="Get events by user", tags=["Events"])
 def get_events_by_user(user_id: int):
     with Session(engine) as db:
         user = db.get(User, user_id)

@@ -22,7 +22,7 @@ from db_utils.helpers import process_records
 from db_utils.database import get_db_session
 from models import engine
 
-router = APIRouter(tags=["Integration"])
+router = APIRouter(tags=["Integrations"])
 
 
 start_consumer_loop()
