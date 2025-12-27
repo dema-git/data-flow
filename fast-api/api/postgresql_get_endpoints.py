@@ -226,11 +226,32 @@ def get_sessions_by_user(user_id: int):
 @router.get("/events", summary="Get list of events", tags=["Events"])
 def get_events(skip: int = 0, limit: int = 50, type: str | None = None):
     with Session(engine) as db:
-        stmt = select(Event)
-        if type:
-            stmt = stmt.where(Event.type == type)
-        events = db.execute(stmt.offset(skip).limit(limit)).scalars().all()
-        return [{"event_id": e.event_id, "session_id": e.session_id, "type": e.type, "timestamp": e.timestamp} for e in events]
+        events = db.execute(select(Event).offset(skip).limit(limit)).scalars().all()
+        total_events = db.execute(
+            select(func.count()).select_from(Event)
+        ).scalar_one()
+
+        return {
+            "data": {
+                "events": [
+                    {
+                        "event_id": e.event_id,
+                        "type": e.type,
+                        "timestamp": e.timestamp,
+                        "links": {
+                            "user": f"/users/{e.session.user.user_id}",
+                            "session": f"/sessions/{e.session.session_id}",
+                        },
+                    }
+                    for e in events
+                ],
+            },
+            "meta": {
+                "count": total_events,
+                "limit": limit,
+                "offset": skip,
+            },
+        }
 
 
 @router.get("/events/{event_id}", summary="Get event details", tags=["Events"])
@@ -239,7 +260,22 @@ def get_event(event_id: int):
         event = db.get(Event, event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
-        return {"event_id": event.event_id, "session_id": event.session_id, "type": event.type, "timestamp": event.timestamp}
+
+        return {
+            "data": {
+                "event_id": event.session_id,
+                "type": event.type,
+                "timestamp": event.timestamp,
+                "links": {
+                  "user": f"/users/{event.session.user_id}",
+                  "session": f"/sessions/{event.session.session_id}"
+                },
+            },
+            "meta": {
+                "browser": event.session.browser,
+                "device": event.session.device,
+            },
+        }
 
 
 @router.get("/events/session/{session_id}", summary="Get events by session", tags=["Events"])
