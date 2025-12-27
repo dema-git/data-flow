@@ -1,5 +1,5 @@
 ##############################################################################################
-# postgresql_get_endpoints.py
+# user_session_event_routes.py
 #
 # This module defines routes to interact with PostgreSQL models using SQLAlchemy.
 # It provides endpoints to retrieve users, sessions, and events with optional
@@ -11,13 +11,13 @@
 # - /sessions: list all sessions or get details of a specific session
 # - /events: list all events or get details of a specific event
 # - Additional endpoints for retrieving sessions/events by user or session
+
+# The routes use service layer functions to handle database operations and keeping the
+# API layer clean
 ##############################################################################################
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session, selectinload
 from models import User, Session as SessionModel, Event, engine
-import uuid
 from services.event_services import (get_events_service, get_event_by_id_service, get_events_by_user_id_service,
                                      get_events_by_session_id_service)
 from services.session_services import get_sessions_service, get_session_by_id_service, get_session_by_user_id_service

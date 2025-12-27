@@ -1,12 +1,21 @@
+##############################################################################################
+# session_services.py
+#
+# Service layer functions for Sessions, handling database operations via SQLAlchemy.
+# Provides functions to fetch sessions, fetch a session by ID, and fetch sessions by user ID,
+# including related events and metadata.
+##############################################################################################
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
 import uuid
+from typing import Dict, Any
 
 
-def get_sessions_service(skip: int, limit: int):
+def get_sessions_service(skip: int, limit: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             sessions = db.execute(select(SessionModel).offset(skip).limit(limit)).scalars().all()
@@ -36,7 +45,7 @@ def get_sessions_service(skip: int, limit: int):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_session_by_id_service(session_id: str):
+def get_session_by_id_service(session_id: str) -> Dict[str, Any]:
     try:
         sid = uuid.UUID(session_id)
     except ValueError:
@@ -76,7 +85,7 @@ def get_session_by_id_service(session_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_session_by_user_id_service(user_id: int):
+def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             user = db.get(User, user_id)

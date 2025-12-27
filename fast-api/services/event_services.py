@@ -1,12 +1,20 @@
+##############################################################################################
+# event_services.py
+#
+# Service layer functions for Events, handling database operations via SQLAlchemy.
+# Provides functions to fetch events, fetch an event by ID, and fetch events by user or session,
+# including related session and user metadata.
+##############################################################################################
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
-import uuid
+from typing import Dict, Any
 
 
-def get_events_service(skip: int, limit: int):
+def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             events = db.execute(select(Event).offset(skip).limit(limit)).scalars().all()
@@ -41,7 +49,7 @@ def get_events_service(skip: int, limit: int):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_event_by_id_service(event_id: int):
+def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             event = db.get(Event, event_id)
@@ -69,7 +77,7 @@ def get_event_by_id_service(event_id: int):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_events_by_user_id_service(user_id: str):
+def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
     try:
         with Session(engine) as db:
             user = db.get(User, user_id)
@@ -116,7 +124,7 @@ def get_events_by_user_id_service(user_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_events_by_session_id_service(session_id: str):
+def get_events_by_session_id_service(session_id: str)-> Dict[str, Any]:
     try:
         with Session(engine) as db:
             session = db.get(SessionModel, session_id)

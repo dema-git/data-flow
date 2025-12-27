@@ -8,12 +8,12 @@
 # all API routers for handling integrations and PostgreSQL data retrieval.
 #
 # Routers included:
-# - integrations_endpoints: Handles external integrations and data processing.
-# - postgresql_get_endpoints: Handles fetching data from PostgreSQL.
+# - integrations_routes: Handles external integrations and data processing.
+# - user_session_event_routes: Handles fetching data from PostgreSQL.
 #####################################################################################
 
 from fastapi import FastAPI
-from api import integrations_endpoints, postgresql_get_endpoints
+from api import integrations_routes, user_session_event_routes
 
 app = FastAPI(
     title="Llama Kafka & MinIO API",
@@ -26,6 +26,6 @@ def homepage():
     return {"page": "Homepage"}
 
 # Include API routers for integrations (Kafka/MinIO) and PostgreSQL endpoints
-app.include_router(integrations_endpoints.router)
+app.include_router(integrations_routes.router)
 app.include_router(postgresql_get_endpoints.router)
 

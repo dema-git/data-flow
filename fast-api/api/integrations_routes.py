@@ -1,5 +1,5 @@
 ###########################################################################################################
-# integrations_endpoints.py
+# integrations_routes.py
 #
 # This module defines endpoints for interacting with external systems such as Kafka and MinIO,
 # as well as processing and storing data in PostgreSQL. These endpoints are typically
@@ -9,6 +9,9 @@
 # - /kafka/consumer: Consume messages from Kafka and persist processed data to MinIO.
 # - /minino/getallfiles: Fetch all files from the primary MinIO bucket, normalize, and store in PostgreSQL.
 # - /minino/movetoarchive: Move all files from the primary MinIO bucket to the archive bucket.
+#
+# The routes use service layer functions to handle database operations and keeping the
+# API layer clean
 #
 # !!! Manual invocation of these endpoints should only be performed in exceptional cases
 # (e.g., debugging or recovery), as it may affect pipeline consistency or result in

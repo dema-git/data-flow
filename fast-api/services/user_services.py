@@ -1,11 +1,19 @@
+##############################################################################################
+# user_services.py
+#
+# Service layer functions for Users, handling database operations via SQLAlchemy.
+# Provides functions to fetch users, fetch a user by ID, and include related sessions.
+##############################################################################################
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
+from typing import Dict, Any
 
 
-def get_users_service(skip: int, limit: int):
+def get_users_service(skip: int, limit: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             users = db.execute(select(User).offset(skip).limit(limit)).scalars().all()
@@ -37,7 +45,7 @@ def get_users_service(skip: int, limit: int):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_user_by_id_service(user_id: int):
+def get_user_by_id_service(user_id: int) -> Dict[str, Any]:
     try:
         with Session(engine) as db:
             user = db.get(User, user_id)
