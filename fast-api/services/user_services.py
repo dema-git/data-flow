@@ -3,6 +3,9 @@
 #
 # Service layer functions for Users, handling database operations via SQLAlchemy.
 # Provides functions to fetch users, fetch a user by ID, and include related sessions.
+#
+# All functions from this file are intended to be imported and used
+# in user_session_event_routes.py for FastAPI endpoints.
 ##############################################################################################
 
 from fastapi import APIRouter, HTTPException
