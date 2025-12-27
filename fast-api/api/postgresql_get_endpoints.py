@@ -15,7 +15,7 @@
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from models import User, Session as SessionModel, Event
 from models import engine
 import uuid
@@ -284,11 +284,40 @@ def get_events_by_session(session_id: str):
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session_id")
+
     with Session(engine) as db:
-        session = db.get(SessionModel, sid)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        return [{"event_id": e.event_id, "type": e.type, "timestamp": e.timestamp} for e in session.events]
+        events = db.execute(
+            select(Event)
+            .where(Event.session_id == sid)
+        ).scalars().all()
+
+        if not events:
+            session_exists = db.get(SessionModel, sid)
+            if not session_exists:
+                raise HTTPException(status_code=404, detail="Session not found")
+
+        return {
+            "data": {
+                "events": [
+                    {
+                        "event_id": e.event_id,
+                        "type": e.type,
+                        "timestamp": e.timestamp,
+                        "browser": e.session.browser,
+                        "device": e.session.device,
+                        "links": {
+                            "user": f"users/{e.session.user_id}",
+                            "session": f"/sessions/{e.session.session_id}",
+                        }
+                    }
+                    for e in events
+                ],
+            },
+            "meta": {
+                "total_events_in_session": len(events),
+            }
+        }
+
 
 
 @router.get("/events/user/{user_id}", summary="Get events by user", tags=["Events"])
@@ -297,7 +326,42 @@ def get_events_by_user(user_id: int):
         user = db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        events = []
-        for session in user.sessions:
-            events.extend([{"event_id": e.event_id, "type": e.type, "timestamp": e.timestamp, "session_id": session.session_id} for e in session.events])
-        return events
+
+        events = db.execute(
+            select(Event)
+            .join(SessionModel, Event.session_id == SessionModel.session_id)
+            .options(selectinload(Event.session))
+            .where(SessionModel.user_id == user_id)
+        ).scalars().all()
+
+        if events:
+            timestamps = [e.timestamp for e in events]
+            first_event_ts = min(timestamps)
+            last_event_ts = max(timestamps)
+        else:
+            first_event_ts = None
+            last_event_ts = None
+
+        return {
+            "data": {
+                "events": [
+                    {
+                        "event_id": e.event_id,
+                        "type": e.type,
+                        "timestamp": e.timestamp,
+                        "browser": e.session.browser if e.session else None,
+                        "device": e.session.device if e.session else None,
+                        "links": {
+                            "user": f"/users/{user_id}",
+                            "session": f"/sessions/{e.session.session_id}" if e.session else None,
+                        }
+                    }
+                    for e in events
+                ],
+            },
+            "meta": {
+                "total_events": len(events),
+                "first_event_timestamp": first_event_ts,
+                "last_event_timestamp": last_event_ts,
+            }
+        }
