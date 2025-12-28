@@ -1,11 +1,55 @@
 #####################################################################
 # db_utils/helpers.py
 #
+# This file contains helper functions for managing database operations
+# and processing user event data.
 #####################################################################
 
 from .crud import get_or_create_user, get_or_create_session, create_event
-from other_helpers.timestamp_utils import convert_timestamp
-from other_helpers.uuid_utils import get_valid_session_id
+from datetime import datetime
+import pandas as pd
+import uuid
+
+
+def convert_timestamp(ts):
+    """
+    Convert various timestamp formats to a UNIX timestamp.
+    """
+    if isinstance(ts, pd.Timestamp):
+        return int(ts.timestamp())
+    elif isinstance(ts, datetime):
+        return int(ts.timestamp())
+    elif isinstance(ts, str):
+        return int(datetime.fromisoformat(ts).timestamp())
+    else:
+        raise ValueError(f"Unknown timestamp type: {type(ts)}")
+
+
+def get_valid_session_id(session_id):
+    """
+    This function is needed because all data is generated via a LLaMA ML model,
+    and sometimes we receive session IDs in an incorrect format.
+    To prevent the application from crashing, this function checks the validity
+    of a session ID. If the session ID is invalid, the entire session and
+    all associated data are skipped.
+    """
+    try:
+        return uuid.UUID(session_id)
+    except (ValueError, TypeError):
+        return None
+
+
+def extract_event_info(record):
+    """
+    function to extract event data
+    """
+    timestamp = convert_timestamp(record['timestamp'])
+    event_type = record['event_type']
+    browser = record.get('browser')
+    device = record.get('device')
+
+    return timestamp, event_type, browser, device
+
 
 def process_records(db, files_data):
     """
@@ -37,10 +81,7 @@ def process_records(db, files_data):
                 continue
 
             # Extract event info
-            timestamp = convert_timestamp(record['timestamp'])
-            event_type = record['event_type']
-            browser = record.get('browser')
-            device = record.get('device')
+            timestamp, event_type, browser, device = extract_event_info(record)
 
             # Get or create user
             user = get_or_create_user(db, user_id, users_cache)
