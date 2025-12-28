@@ -59,7 +59,7 @@ def kafka_consumer():
     """
 )
 def get_files_from_minio_bucket():
-    files_data = get_files_data('data-bucket')
+    files_data = get_files_data('active-bucket')
     with get_db_session() as db:
         skipped = process_records(db, files_data)
     return {"status": "done", "skipped_sessions": skipped}
@@ -77,5 +77,5 @@ def get_files_from_minio_bucket():
     """
 )
 def move_all_files_from_primary_to_archive_bucket():
-    move_files_to_another_bucket('data-bucket', 'parquet-bucket')
+    move_files_to_another_bucket('active-bucket', 'archive-bucket')
     return {"status": "success"}

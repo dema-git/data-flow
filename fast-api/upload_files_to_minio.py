@@ -182,7 +182,7 @@ def upload_batch(batch: List[List[Dict[str, Any]]]):
 
     # Initialize manager and uploader
     minio_mgr = MinioManager(config)
-    uploader = BatchUploader(minio_mgr, bucket_name="data-bucket")
+    uploader = BatchUploader(minio_mgr, bucket_name="active-bucket")
 
     # Upload the batch (used in kafka_consumer.py at /kafka/consumer Endpoint)
     uploader.upload_batch(batch)
@@ -197,7 +197,7 @@ def get_all_files_from_bucket(bucket_name: str):
     )
     manager = MinioManager(config)
     #  Get all objects as bytes in memory
-    all_objects = manager.download_all_objects("data-bucket")
+    all_objects = manager.download_all_objects("active-bucket")
 
     return all_objects
 

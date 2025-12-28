@@ -74,7 +74,7 @@ class BatchUploader:
 ###########################
 # helper functions
 ###########################
-def upload_batch(batch: List[List[Dict[str, Any]]], bucket_name="data-bucket"):
+def upload_batch(batch: List[List[Dict[str, Any]]], bucket_name="active-bucket"):
     uploader = BatchUploader(manager, bucket_name=bucket_name)
     uploader.upload_batch(batch)
 
