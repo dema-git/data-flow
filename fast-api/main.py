@@ -27,5 +27,5 @@ def homepage():
 
 # Include API routers for integrations (Kafka/MinIO) and PostgreSQL endpoints
 app.include_router(integrations_routes.router)
-app.include_router(postgresql_get_endpoints.router)
+app.include_router(user_session_event_routes.router)
 
