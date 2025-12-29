@@ -18,16 +18,16 @@ class BaseAppException(Exception):
 class MinIOException(BaseAppException):
     # Raised when a MinIO operation fails
     def __init__(self, message: str):
-        super().__init__(message, status_code=404)
+        super().__init__(message, status_code=500)
 
 
 class KafkaException(BaseAppException):
     # Raised when a Kafka-related operation fails
     def __init__(self, message: str):
-        super().__init__(message, status_code=400)
+        super().__init__(message, status_code=500)
 
 
 class DataBaseException(BaseAppException):
     # Raised when a database operation fails
     def __init__(self, message: str):
-        super().__init__(message, status_code=401)
+        super().__init__(message, status_code=500)
