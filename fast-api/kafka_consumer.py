@@ -13,7 +13,7 @@
 ##########################################################
 
 from confluent_kafka import Consumer, TopicPartition
-from upload_files_to_minio import upload_batch
+from minio_utils.files import upload_batch
 from collections import defaultdict
 import threading
 import json
