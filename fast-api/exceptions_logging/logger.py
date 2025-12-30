@@ -6,6 +6,7 @@
 
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from typing import Union
 
 
@@ -15,9 +16,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 def get_logger(level: Union[int, str] = logging.INFO):
     """
     Returns a logger that writes to <LEVEL>.log (INFO.log,
-    WARNING.log, ERROR.log)
+    WARNING.log, ERROR.log).
+    with rotating file handler
     """
-    # Check if level is 'str'
     if isinstance(level, str):
         level = logging.getLevelName(level.upper())
 
@@ -28,7 +29,12 @@ def get_logger(level: Union[int, str] = logging.INFO):
     logger.setLevel(level)
 
     if not logger.handlers:
-        handler = logging.FileHandler(log_file)
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10 mb
+            backupCount=5,  # keep last 5 files
+            encoding="utf-8",
+        )
         handler.setLevel(level)
 
         formatter = logging.Formatter(
@@ -41,6 +47,7 @@ def get_logger(level: Union[int, str] = logging.INFO):
         logger.propagate = False
 
     return logger
+
 
 # define all loggers
 info_logger = get_logger(logging.INFO)
