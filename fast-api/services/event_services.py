@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
 from typing import Dict, Any
-from exceptions_logging.logger import info_logger, warn_logger, error_logger
+from exceptions_logging.logger import info_logger, error_logger
 
 
 def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
@@ -88,7 +88,7 @@ def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
             }
     except SQLAlchemyError as e:
         error_logger.exception(
-            f"Database error while fetching events by id: {e.args}"
+            f"Database error while fetching event by id: {e.args}"
         )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
