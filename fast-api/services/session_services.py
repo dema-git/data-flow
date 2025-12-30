@@ -16,9 +16,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
 import uuid
 from typing import Dict, Any
-
+from exceptions_logging.logger import info_logger, error_logger
 
 def get_sessions_service(skip: int, limit: int) -> Dict[str, Any]:
+    info_logger.info(
+        "Fetching all sessions | skip=%s limit=%s", skip, limit,
+    )
     try:
         with Session(engine) as db:
             sessions = db.execute(select(SessionModel).offset(skip).limit(limit)).scalars().all()
@@ -43,12 +46,21 @@ def get_sessions_service(skip: int, limit: int) -> Dict[str, Any]:
                 }
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching sessions: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_sessions_service: {e.args}",
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_session_by_id_service(session_id: str) -> Dict[str, Any]:
+    info_logger.info(
+        "Fetching session by id"
+    )
     try:
         sid = uuid.UUID(session_id)
     except ValueError:
@@ -83,12 +95,21 @@ def get_session_by_id_service(session_id: str) -> Dict[str, Any]:
                 },
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching session by id: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_session_by_id_service: {e.args}",
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
+    info_logger.info(
+        "Fetching sessions by user id"
+    )
     try:
         with Session(engine) as db:
             user = db.get(User, user_id)
@@ -122,6 +143,12 @@ def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
                 }
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching session by user id: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_session_by_user_id_service: {e.args}",
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
