@@ -1,5 +1,6 @@
 ####################################################################
 # logger.py
+#
 # Returns a logger that writes to <LEVEL>.log (INFO.log, WARNING.log, ERROR.log)
 ####################################################################
 
@@ -40,3 +41,8 @@ def get_logger(level: Union[int, str] = logging.INFO):
         logger.propagate = False
 
     return logger
+
+# define all loggers
+info_logger = get_logger(logging.INFO)
+warn_logger = get_logger(logging.WARNING)
+error_logger = get_logger(logging.ERROR)

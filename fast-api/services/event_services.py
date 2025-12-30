@@ -15,9 +15,12 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, Session as SessionModel, Event, engine
 from typing import Dict, Any
+from exceptions_logging.logger import info_logger, warn_logger, error_logger
 
 
 def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
+    info_logger.info(
+        "Fetching all events | skip=%s limit=%s",skip, limit,)
     try:
         with Session(engine) as db:
             events = db.execute(select(Event).offset(skip).limit(limit)).scalars().all()
@@ -47,12 +50,21 @@ def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
                 },
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching events: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_events_service: {e.args}",
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
+    info_logger.info(
+        "Fetching event by id"
+    )
     try:
         with Session(engine) as db:
             event = db.get(Event, event_id)
@@ -75,12 +87,21 @@ def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
                 },
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching events by id: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_event_by_id_service: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
+    info_logger.info(
+        "Fetching events by user id"
+    )
     try:
         with Session(engine) as db:
             user = db.get(User, user_id)
@@ -122,12 +143,21 @@ def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
             }
 
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching events by user id: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_events_by_user_id_service: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_events_by_session_id_service(session_id: str)-> Dict[str, Any]:
+    info_logger.info(
+        "Fetching events by session id"
+    )
     try:
         with Session(engine) as db:
             session = db.get(SessionModel, session_id)
@@ -173,6 +203,12 @@ def get_events_by_session_id_service(session_id: str)-> Dict[str, Any]:
                 }
             }
     except SQLAlchemyError as e:
+        error_logger.exception(
+            f"Database error while fetching events by session id: {e.args}"
+        )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
+        error_logger.exception(
+            f"Unexpected error in get_events_by_session_id_service: {e.args}"
+        )
         raise HTTPException(status_code=500, detail=f"Internal server error{e}")
