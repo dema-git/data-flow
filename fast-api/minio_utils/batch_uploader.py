@@ -16,6 +16,8 @@ import tempfile
 import os
 from exceptions_logging.custom_exceptions import MinIOException
 from .minio_client import MinioManager
+from exceptions_logging.logger import info_logger, error_logger, warn_logger
+
 
 @dataclass
 class BatchUploader:
@@ -45,12 +47,12 @@ class BatchUploader:
 
     def upload_batch(self, batch: List[List[Dict[str, Any]]]):
         if not batch or not batch[0]:
-            print("Empty batch, skipping upload.")
+            info_logger.info("Empty batch, skipping upload.")
             return
 
         rows = self.transform_batch_to_rows(batch)
         if not rows:
-            print("No events found, skipping upload.")
+            info_logger.info("No events found, skipping upload.")
             return
         try:
             df = pd.DataFrame(rows)
@@ -64,6 +66,9 @@ class BatchUploader:
             object_name = f"data_{datetime.now():%Y-%m-%d_%H-%M-%S}.parquet"
             self.minio_manager.upload_file(self.bucket_name, object_name, parquet_file)
         except Exception as e:
+            error_logger.exception(
+                "Failed to upload batch to MinIO"
+            )
             raise MinIOException("Failed to upload batch to MinIO") from e
 
         finally:
