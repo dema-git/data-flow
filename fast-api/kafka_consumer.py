@@ -17,6 +17,7 @@ from minio_utils.files import upload_batch
 from collections import defaultdict
 import threading
 import json
+from exceptions_logging.logger import info_logger, error_logger
 
 TOPIC = "llama_topic"
 BOOTSTRAP = "kafka:9092"
@@ -37,18 +38,22 @@ queue_lock = threading.Lock()
 
 
 def consume_loop():
-    """Background consumer: read messages and add to queue"""
+    # Background consumer: read messages and add to queue
     while True:
         msg = consumer.poll(1.0)
 
         if msg is None:
             continue
         if msg.error():
+            error_logger.warning(f"Consumer error: {msg.error()}")
             continue
 
         try:
             payload = json.loads(msg.value().decode("utf-8"))
         except json.JSONDecodeError:
+            error_logger.warning(
+                "Failed to decode message: %s", msg.value()
+            )
             continue
 
         with queue_lock:
@@ -61,7 +66,9 @@ def consume_loop():
 
 
 def start_consumer_loop():
-    """Start consumer in separate thread"""
+    # Start consumer in separate thread
+    info_logger.info(
+        f"Starting Kafka consumer loop for topic {TOPIC}")
     threading.Thread(
         target=consume_loop,
         daemon=True
@@ -82,7 +89,13 @@ def get_messages():
 
     # Upload batch to MinIO (durable storage)
     # Offsets must NOT be committed if this step fails
-    upload_batch(data_batch)
+    try:
+        upload_batch(data_batch)
+    except Exception as e:
+        error_logger.exception(
+            f"Failed to upload batch of {len(data_batch)} messages"
+        )
+        raise
 
     # Collect the highest processed offset per topic-partition
     offsets = defaultdict(lambda: -1)
@@ -99,5 +112,8 @@ def get_messages():
     ]
 
     consumer.commit(offsets=tps)
+    info_logger.info(
+        f"Committed offsets for {len(batch)} messages: {tps}",
+    )
 
     return data_batch
