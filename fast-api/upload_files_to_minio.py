@@ -19,6 +19,7 @@ import tempfile
 import os
 from typing import List, Dict, Any
 from exceptions_logging.custom_exceptions import MinIOException
+from exceptions_logging.logger import info_logger, error_logger, warn_logger
 
 @dataclass
 class MinioConfig:
@@ -33,6 +34,9 @@ class MinioManager:
     config: MinioConfig
 
     def __post_init__(self):
+        info_logger.info(
+            "Initializing MinIO client"
+        )
         try:
             self.client = Minio(
                 self.config.host,
@@ -41,17 +45,29 @@ class MinioManager:
                 secure=self.config.secure
             )
         except Exception as e:
+            error_logger.exception(
+                f"Failed to initialize MinIO client: {e.args}"
+            )
             raise MinIOException("Failed to initialize MinIO client") from e
 
     def ensure_bucket(self, bucket_name: str):
         # Create bucket if it doesn't exist
+        info_logger.info(
+            "Ensuring the MinIO bucket"
+        )
         try:
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
         except Exception as e:
+            error_logger.exception(
+                f"Failed to ensure bucket: {e.args}"
+            )
             raise MinIOException(f"Failed to ensure bucket '{bucket_name}'") from e
 
     def upload_file(self, bucket_name: str, object_name: str, file_path: str):
+        info_logger.info(
+            f"Uploading files '{object_name}' to bucket '{bucket_name}'"
+        )
         try:
             with open(file_path, "rb") as f:
                 self.client.put_object(
@@ -62,11 +78,17 @@ class MinioManager:
                     content_type="application/octet-stream"
             )
         except Exception as e:
+            error_logger.exception(
+                f"Failed to upload '{object_name}' to bucket '{bucket_name}': {e.args}"
+            )
             raise MinIOException(f"Failed to upload '{object_name}' to bucket '{bucket_name}'") from e
 
 
     def download_all_objects(self, bucket_name: str, download_path: str = None) -> dict:
         objects_data = {}
+        info_logger.info(
+            f"Downloading objects from bucket '{bucket_name}'"
+        )
         for obj in self.client.list_objects(bucket_name, recursive=True):
             response = None
             try:
@@ -78,11 +100,13 @@ class MinioManager:
                     with open(file_path, "wb") as f:
                         for chunk in response.stream(32 * 1024):
                             f.write(chunk)
-                    print(f"Downloaded {obj.object_name} to {file_path}")
                 else:
-
                     objects_data[obj.object_name] = response.read()
+
             except Exception as e:
+                error_logger.exception(
+                    f"Failed to download object '{obj.object_name}': {e.args}"
+                )
                 raise MinIOException(f"Failed to download object '{obj.object_name}'") from e
             finally:
                 if response:
@@ -92,34 +116,46 @@ class MinioManager:
 
 
     def delete_all_objects(self, bucket_name: str):
+        info_logger.info(
+            f"Deleting objects from bucket '{bucket_name}'"
+        )
         try:
             objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name, recursive=True)]
             if objects_to_delete:
                 delete_gen = map(lambda name: {"ObjectName": name}, objects_to_delete)
                 self.client.remove_objects(bucket_name, delete_gen)
-                print(f"Deleted all objects from bucket '{bucket_name}'")
+                info_logger.info(
+                    f"All objects were deleted from bucket '{bucket_name}'"
+                )
             else:
                 return
         except Exception as e:
+            error_logger.exception(
+                f"Failed to delete objects from bucket '{bucket_name}': {e.args}"
+            )
             raise MinIOException(f"Failed to delete objects from bucket '{bucket_name}'") from e
 
 
     def move_objects_to_bucket(self, source_bucket: str, target_bucket: str):
+        info_logger.info(
+            f"Moving objects objects from '{source_bucket}' to '{target_bucket}'"
+        )
         try:
             self.ensure_bucket(target_bucket)
             objects = self.client.list_objects(source_bucket, recursive=True)
             for obj in objects:
 
                 source = CopySource(source_bucket, obj.object_name)
-
                 result = self.client.copy_object(
                     bucket_name=target_bucket,
                     object_name=obj.object_name,
                     source=source
                 )
-
                 self.client.remove_object(source_bucket, obj.object_name)
         except Exception as e:
+            error_logger.exception(
+                f"Failed to move objects from '{source_bucket}' to '{target_bucket}': {e.args}"
+            )
             raise MinIOException(f"Failed to move objects from '{source_bucket}' to '{target_bucket}'") from e
 
 @dataclass
@@ -152,16 +188,19 @@ class BatchUploader:
     def upload_batch(self, batch: List[List[Dict[str, Any]]]):
         # Skip empty batches
         if not batch or not batch[0]:
-            print("Warning: empty batch, nothing to upload.")
+            warn_logger.warning("Warning: empty batch, nothing to upload")
             return
 
         # Transform batch to flat rows
         rows = self.transform_batch_to_rows(batch)
         if not rows:
-            print("Warning: no events found in batch.")
+            warn_logger.warning("no events found in batch")
             return
 
         # Create DataFrame и convert to timestamp
+        info_logger.info(
+            f"Uploading batch to MinIO"
+        )
         try:
             df = pd.DataFrame(rows)
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
@@ -179,6 +218,9 @@ class BatchUploader:
             # Upload file
             self.minio_manager.upload_file(self.bucket_name, object_name, parquet_file)
         except Exception as e:
+            error_logger.exception(
+                f"Failed to upload batch to MinIO: {e.args}"
+            )
             raise MinIOException("Failed to upload batch to MinIO") from e
         finally:
             # Remove temporary file
