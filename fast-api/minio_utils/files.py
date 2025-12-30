@@ -13,6 +13,7 @@ import pandas as pd
 from .minio_client import get_minio_manager
 from .batch_uploader import BatchUploader
 from exceptions_logging.custom_exceptions import MinIOException
+from exceptions_logging.logger import info_logger, error_logger
 
 manager = get_minio_manager()
 
@@ -35,9 +36,13 @@ def get_files_data(bucket_name: str) -> List[Dict]:
     files = get_all_files_from_bucket(bucket_name)
     arr = []
     for filename, content in files.items():
+        info_logger.info(f"Reading parquet file {filename} from bucket {bucket_name}")
         try:
             df = pd.read_parquet(BytesIO(content))
         except Exception as e:
+            error_logger.exception(
+                f"Failed to read parquet file '{filename}' from bucket '{bucket_name}'"
+            )
             raise MinIOException(
                 f"Failed to read parquet file '{filename}' from bucket '{bucket_name}'"
             ) from e
@@ -45,6 +50,7 @@ def get_files_data(bucket_name: str) -> List[Dict]:
             "filename": filename,
             "data": df.to_dict(orient="records")
         })
+        info_logger.info(f"Successfully read file {filename} with {len(df)} records")
     return arr
 
 

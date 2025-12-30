@@ -8,6 +8,7 @@
 
 from models import User, Session, Event
 from uuid import UUID
+from exceptions_logging.logger import info_logger, error_logger
 
 def get_or_create_user(db,
                        user_id: int,
@@ -20,16 +21,25 @@ def get_or_create_user(db,
     If the user does not exist, a new User is created, added to the database,
     and cached for faster access next time.
     """
-    if user_id in users_cache:
-        return users_cache[user_id]
+    try:
+        if user_id in users_cache:
+            return users_cache[user_id]
 
-    user = db.get(User, user_id)
-    if not user:
-        user = User(user_id=user_id)
-        db.add(user)
+        user = db.get(User, user_id)
+        if not user:
+            info_logger.info(
+                f"Creating new user | user_id={user_id}"
+            )
+            user = User(user_id=user_id)
+            db.add(user)
 
-    users_cache[user_id] = user
-    return user
+        users_cache[user_id] = user
+        return user
+    except Exception as e:
+        error_logger.exception(
+            f"Failed to get or create user | user_id={user_id}"
+        )
+        raise
 
 
 def get_or_create_session(db,
@@ -46,21 +56,30 @@ def get_or_create_session(db,
     user, browser, and device information, added to the database session,
     and cached for subsequent access.
     """
-    if session_id in sessions_cache:
-        session = sessions_cache[session_id]
-    else:
-        session = db.get(Session, session_id)
-        if not session:
-            session = Session(
-                session_id=session_id,
-                user=user,
-                browser=browser,
-                device=device
-            )
-            db.add(session)
-        sessions_cache[session_id] = session
+    try:
+        if session_id in sessions_cache:
+            return sessions_cache[session_id]
+        else:
+            session = db.get(Session, session_id)
+            if not session:
+                info_logger.info(
+                    f"Creating new session | session_id={session_id} user_id={user.user_id}"
+                )
+                session = Session(
+                    session_id=session_id,
+                    user=user,
+                    browser=browser,
+                    device=device
+                )
+                db.add(session)
+            sessions_cache[session_id] = session
+            return session
 
-    return session
+    except Exception as e:
+        error_logger.exception(
+            f"Failed to get or create session | session_id={session_id} user_id={user.user_id}"
+        )
+        raise
 
 
 def create_event(db, session:
@@ -69,10 +88,17 @@ def create_event(db, session:
     """
     Create a new Event and add it to the database session.
     """
-    event = Event(
-        session=session,
-        timestamp=timestamp,
-        type=event_type
-    )
-    db.add(event)
-    return event
+    try:
+        event = Event(
+            session=session,
+            timestamp=timestamp,
+            type=event_type
+        )
+        db.add(event)
+        return event
+
+    except Exception:
+        error_logger.exception(
+            f"Failed to create event | session_id={session.session_id} type={event_type}"
+        )
+        raise

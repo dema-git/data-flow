@@ -113,7 +113,7 @@ def get_messages():
 
     consumer.commit(offsets=tps)
     info_logger.info(
-        f"Committed offsets for {len(batch)} messages: {tps}",
+        f"Getting all messages from Kafka | total messages: {len(batch)}",
     )
 
     return data_batch

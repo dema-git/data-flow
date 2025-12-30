@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from minio import Minio
 from minio.commonconfig import CopySource
 import os
+from exceptions_logging.logger import info_logger, error_logger, warn_logger
 
 @dataclass
 class MinioConfig:
@@ -42,8 +43,22 @@ class MinioManager:
 
     def ensure_bucket(self, bucket_name: str):
         # Create bucket if it does not exist.
-        if not self.client.bucket_exists(bucket_name):
-            self.client.make_bucket(bucket_name)
+        try:
+            if not self.client.bucket_exists(bucket_name):
+                info_logger.info(
+                    f"Creating bucket '{bucket_name}'"
+                )
+                self.client.make_bucket(bucket_name)
+            else:
+                info_logger.info(
+                    f"Bucket '{bucket_name}' already exists"
+                )
+
+        except Exception:
+            error_logger.exception(
+                f"Failed to ensure bucket '{bucket_name}'"
+            )
+            raise
 
     def upload_file(self, bucket_name: str, object_name: str, file_path: str):
         # Upload file to a bucket.
@@ -93,13 +108,19 @@ class MinioManager:
     def move_objects_to_bucket(self, source_bucket: str, target_bucket: str):
         # Move all objects from one bucket to another
         self.ensure_bucket(target_bucket)
-        for obj in self.client.list_objects(source_bucket, recursive=True):
-            source = CopySource(source_bucket, obj.object_name)
-            result = self.client.copy_object(bucket_name=target_bucket, object_name=obj.object_name, source=source)
-            print(f"Copied '{obj.object_name}' to '{target_bucket}' (version: {result.version_id})")
-            self.client.remove_object(source_bucket, obj.object_name)
-            print(f"Removed '{obj.object_name}' from '{source_bucket}'")
-
+        info_logger.info(
+            f"Moving all objects from bucket '{source_bucket}' to '{target_bucket}'"
+        )
+        try:
+            for obj in self.client.list_objects(source_bucket, recursive=True):
+                source = CopySource(source_bucket, obj.object_name)
+                result = self.client.copy_object(bucket_name=target_bucket, object_name=obj.object_name, source=source)
+                self.client.remove_object(source_bucket, obj.object_name)
+        except Exception:
+            error_logger.exception(
+                f"Failed to move objects from '{source_bucket}' to '{target_bucket}'"
+            )
+            raise
 
 def get_minio_manager(config: MinioConfig = None) -> MinioManager:
     # Return initialized MinioManager instance
