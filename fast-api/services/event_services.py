@@ -61,7 +61,10 @@ def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
+def get_event_by_id_service(event_id: int,
+                            skip: int = 0,
+                            limit: int = 20
+                            ) -> Dict[str, Any]:
     info_logger.info(
         "Fetching event by id"
     )
@@ -98,7 +101,10 @@ def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
+def get_events_by_user_id_service(user_id: str,
+                                  skip: int = 0,
+                                  limit: int = 20
+                                  )-> Dict[str, Any]:
     info_logger.info(
         "Fetching events by user id"
     )
@@ -108,12 +114,12 @@ def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            events = []
-            for session in user.sessions:
-                events.extend(session.events)
+            events = [e for s in user.sessions for e in s.events]
+            total_events = len(events)
+            paginated_events = events[skip: skip + limit]
 
             if events:
-                timestamps = [e.timestamp for e in events]
+                timestamps = [e.timestamp for e in paginated_events]
                 first_event_ts = min(timestamps)
                 last_event_ts = max(timestamps)
             else:
@@ -133,10 +139,12 @@ def get_events_by_user_id_service(user_id: str)-> Dict[str, Any]:
                             "session": f"/sessions/{e.session.session_id}" if e.session else None,
                         }
                     }
-                    for e in events
+                    for e in paginated_events
                 ],
                 "meta": {
-                    "total_events": len(events),
+                    "total_events": total_events,
+                    "limit": limit,
+                    "offset": skip,
                     "first_event_timestamp": first_event_ts,
                     "last_event_timestamp": last_event_ts,
                 }

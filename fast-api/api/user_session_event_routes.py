@@ -76,6 +76,6 @@ def get_events_by_session(session_id: str):
 
 
 @router.get("/events/user/{user_id}", summary="Get events by user", tags=["Events"])
-def get_events_by_user(user_id: int):
-    return get_events_by_user_id_service(user_id=user_id)
+def get_events_by_user(user_id: int, skip: int = 0, limit: int = 50):
+    return get_events_by_user_id_service(user_id=user_id, skip=skip, limit=limit)
 
