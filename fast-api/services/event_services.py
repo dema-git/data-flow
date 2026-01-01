@@ -61,10 +61,7 @@ def get_events_service(skip: int, limit: int) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_event_by_id_service(event_id: int,
-                            skip: int = 0,
-                            limit: int = 20
-                            ) -> Dict[str, Any]:
+def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
     info_logger.info(
         "Fetching event by id"
     )
