@@ -73,7 +73,7 @@ def get_event_by_id_service(event_id: int) -> Dict[str, Any]:
 
             return {
                 "data": {
-                    "event_id": event.session_id,
+                    "event_id": event.event_id,
                     "type": event.type,
                     "timestamp": event.timestamp,
                     "links": {
