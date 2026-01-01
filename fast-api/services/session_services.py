@@ -106,7 +106,10 @@ def get_session_by_id_service(session_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
+def get_session_by_user_id_service(user_id: int,
+                                   skip: int = 0,
+                                   limit: int = 20
+                                   ) -> Dict[str, Any]:
     info_logger.info(
         "Fetching sessions by user id"
     )
@@ -116,10 +119,13 @@ def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
+            total_sessions = len(user.sessions)
+            paginated_sessions = user.sessions[skip : skip + limit]
+
             sessions_data = []
             last_event_ts_list = []
 
-            for s in user.sessions:
+            for s in paginated_sessions:
                 last_ts = max((e.timestamp for e in s.events), default=None)
                 if last_ts is not None:
                     last_event_ts_list.append(last_ts)
@@ -137,7 +143,9 @@ def get_session_by_user_id_service(user_id: int) -> Dict[str, Any]:
                 "data": {
                     "sessions": sessions_data,
                     "meta": {
-                        "total_sessions": len(sessions_data),
+                        "total_sessions": total_sessions,
+                        "limit": limit,
+                        "offset": skip,
                         "last_event_ts": max(last_event_ts_list) if last_event_ts_list else None
                     }
                 }
