@@ -25,7 +25,7 @@ services:
     container_name: kafdrop
     build:
       context: .
-      dockerfile: kafdrop/Dockerfile
+      dockerfile: services/kafdrop/Dockerfile
     restart: always
     ports:
       - "${KAFDROP_PORT}:${KAFDROP_PORT}"

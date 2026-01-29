@@ -1,7 +1,7 @@
 services:
   api_app:
     build:
-      context: ./fast-api
+      context: services/fast-api
     container_name: api_app
     ports:
       - "8000:8000"
