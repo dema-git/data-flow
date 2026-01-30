@@ -17,9 +17,9 @@ services:
       - project_default
 
   minio-init:
-    build: ./services/minio-init
-    depends_on:
-      - minio
+    build:
+      context: .
+      dockerfile: ./services/minio-init/Dockerfile
     environment:
       MINIO_USER: ${MINIO_USER}
       MINIO_PASSWORD: ${MINIO_PASSWORD}
