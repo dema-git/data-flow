@@ -3,8 +3,8 @@ services:
     image: minio/minio:latest
     container_name: minio
     ports:
-      - "9100:9010"
-      - "9101:9011"
+      - "${MINIO_API_PORT_EXTERNAL}:9010"
+      - "${MINIO_CONSOLE_PORT_EXTERNAL}:9011"
     environment:
       MINIO_ROOT_USER: ${MINIO_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
@@ -15,6 +15,18 @@ services:
     restart: always
     networks:
       - project_default
+
+  minio-init:
+    build: ./services/minio-init
+    depends_on:
+      - minio
+    environment:
+      MINIO_USER: ${MINIO_USER}
+      MINIO_PASSWORD: ${MINIO_PASSWORD}
+    networks:
+      - project_default
+    restart: "no"
+
 
 networks:
   project_default:
