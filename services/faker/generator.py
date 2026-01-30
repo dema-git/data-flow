@@ -1,3 +1,32 @@
+#####################################################
+#
+# generator.py
+#
+# Main class that creates session data.
+#
+# This file contains SessionEventFaker - the main class that ties
+# everything together to generate fake user sessions
+#
+# The class wraps around the Faker library and uses helper functions
+# from helpers.py to build complete user sessions with multiple events.
+#
+# Key responsibilities:
+#  - Set up Faker with optional seed for repeatable results
+#  - Generate a complete session (one user's journey through the site)
+#  - Generate batches of multiple sessions
+#
+# Main methods:
+#  generate_session_events(): Creates all events for one user session
+#   - Decides if user will buy (conversion)
+#   - Picks product, time, and session details
+#   - Creates events like page views, add to cart, purchase
+#   - Returns list of event dictionaries
+#
+# generate_batch(): Creates events for many sessions
+#   - Calls generate_session_events() multiple times
+#   - Combines all events into one list
+######################################################
+
 import json
 import random
 from typing import List, Dict, Optional
@@ -89,3 +118,14 @@ class SessionEventFaker:
             events.append(raw_event)
 
         return events
+
+    def generate_batch(self, num_sessions: int) -> List[Dict]:
+        """
+        Generate events for multiple sessions
+        """
+        all_events: List[Dict] = []
+
+        for _ in range(num_sessions):
+            all_events.extend(self.generate_session_events())
+
+        return all_events
