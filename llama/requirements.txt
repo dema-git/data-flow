@@ -1,9 +1,0 @@
---extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-llama-cpp-python==0.2.75
-fastapi
-uvicorn
-faker
-sse_starlette
-confluent_kafka
-huggingface_hub
-
