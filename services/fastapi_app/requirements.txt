@@ -3,6 +3,7 @@ uvicorn[standard]
 confluent_kafka
 minio
 pandas
+faker
 pyarrow
 SQLAlchemy
 psycopg2-binary

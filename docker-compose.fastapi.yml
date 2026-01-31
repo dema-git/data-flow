@@ -1,7 +1,8 @@
 services:
   api_app:
     build:
-      context: services/fast-api
+      context: .
+      dockerfile: services/fastapi_app/Dockerfile
     container_name: api_app
     ports:
       - "8000:8000"
