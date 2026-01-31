@@ -82,7 +82,7 @@ async def background_loop(
             logger.info("Generated %s events", len(events))
 
             for event in events:
-                await send_session_event(kafka_ctx, event)
+                send_session_event(kafka_ctx, event)
 
             logger.info("Sent %s events to Kafka", len(events))
             await asyncio.sleep(interval_seconds)
@@ -103,7 +103,7 @@ async def on_startup():
     global _background_task
 
     logger.info("App startup: starting Kafka producer and background loop")
-    await start_producer(kafka_ctx)
+    start_producer(kafka_ctx)
     _background_task = asyncio.create_task(background_loop())
 
 
@@ -120,7 +120,7 @@ async def on_shutdown():
         except asyncio.CancelledError:
             pass
 
-    await stop_producer(kafka_ctx)
+    stop_producer(kafka_ctx)
 
 
 # ------------------------------------------------------------------------------

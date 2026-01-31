@@ -25,7 +25,7 @@ from db_utils.helpers import process_records
 from db_utils.database import get_db_session
 from models import engine
 from exceptions_logging.custom_exceptions import MinIOException, KafkaException
-
+from services.faker.config import FakerConfig
 
 from services.faker.generator import SessionEventFaker
 from services.kafka.producer import KafkaProducerContext
@@ -33,8 +33,8 @@ from services.kafka.producer import KafkaProducerContext
 router = APIRouter(tags=["Integrations"])
 
 
-# faker = SessionEventFaker(FakerConfig())
-# kafka_ctx = KafkaProducerContext()
+faker = SessionEventFaker(FakerConfig())
+kafka_ctx = KafkaProducerContext()
 
 @router.get(
     "/kafka/consumer",
