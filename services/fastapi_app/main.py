@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from api import integrations_routes, user_session_event_routes, faker_generator_route
 from services.faker.generator import SessionEventFaker
 from services.faker.config import FakerConfig
+from services.kafka.consumer import start_consumer_loop
 from services.kafka.producer import (
     KafkaProducerContext,
     start_producer,
@@ -28,18 +29,14 @@ from services.kafka.producer import (
     send_session_event,
 )
 
-# ------------------------------------------------------------------------------
-# Logging setup
-# ------------------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ------------------------------------------------------------------------------
-# FastAPI app
-# ------------------------------------------------------------------------------
+
 app = FastAPI(
     title="Llama Kafka & MinIO API",
     description="API for generating sessions via Faker, sending to Kafka, and storing/retrieving from MinIO",
@@ -52,9 +49,6 @@ def homepage():
     return {"page": "Homepage"}
 
 
-# ------------------------------------------------------------------------------
-# Global services: Faker + Kafka context
-# ------------------------------------------------------------------------------
 faker = SessionEventFaker(FakerConfig())
 kafka_ctx = KafkaProducerContext()
 
@@ -95,15 +89,15 @@ async def background_loop(
         logger.info("Background loop stopped")
 
 
-# ------------------------------------------------------------------------------
-# Startup / Shutdown hooks
-# ------------------------------------------------------------------------------
+
 @app.on_event("startup")
 async def on_startup():
     global _background_task
 
     logger.info("App startup: starting Kafka producer and background loop")
     start_producer(kafka_ctx)
+    start_consumer_loop()
+
     _background_task = asyncio.create_task(background_loop())
 
 
@@ -123,10 +117,7 @@ async def on_shutdown():
     stop_producer(kafka_ctx)
 
 
-# ------------------------------------------------------------------------------
-# Include routers (endpoints only)
-# ------------------------------------------------------------------------------
-# app.include_router(integrations_routes.router)
+app.include_router(integrations_routes.router)
 # app.include_router(user_session_event_routes.router)
 app.include_router(faker_generator_route.router)
 
