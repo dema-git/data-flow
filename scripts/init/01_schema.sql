@@ -1,9 +1,10 @@
 -- ====================================================
 --  schema.sql
 --  Database initialization for Silver & Gold layers
+--  !! Bronze level should not be saved to the database
+--  + initialization of pipeline state and outbox models
 -- ====================================================
 
--- Create admin user if it does not exist
 DO $$
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'admin1') THEN
