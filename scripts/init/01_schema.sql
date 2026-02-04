@@ -12,8 +12,9 @@ BEGIN
 END $$;
 
 CREATE SCHEMA IF NOT EXISTS mart AUTHORIZATION admin1;
+CREATE SCHEMA IF NOT EXISTS pipeline AUTHORIZATION admin1;
 
-SET search_path TO mart, public;
+SET search_path TO mart, pipeline, public;
 
 
 ------------- SILVER LAYER
@@ -130,9 +131,67 @@ CREATE INDEX IF NOT EXISTS idx_gold_product_product_id
     ON mart.gold_product_events(product_id);
 
 
+--------------------------------------------
+------------- PIPELINE: PROCESSING STATE
+--------------------------------------------
+
+CREATE TABLE IF NOT EXISTS pipeline.processing_state (
+    id SERIAL PRIMARY KEY,
+
+    dataset           TEXT    NOT NULL,
+    layer             TEXT    NOT NULL,
+
+    last_processed_ts TIMESTAMP,
+    last_processed_id BIGINT,
+
+    updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_processing_state_dataset_layer
+        UNIQUE (dataset, layer)
+);
+
+CREATE INDEX IF NOT EXISTS idx_processing_state_dataset_layer
+    ON pipeline.processing_state(dataset, layer);
+
+
+------------- PIPELINE: OUTBOX TASKS
+
+
+CREATE TABLE IF NOT EXISTS pipeline.outbox_tasks (
+    id BIGSERIAL PRIMARY KEY,
+
+    event_type    TEXT    NOT NULL,
+    dataset       TEXT    NOT NULL,
+    layer         TEXT    NOT NULL,
+
+    partition_key TEXT,
+
+
+    status        TEXT    NOT NULL,
+    attempts      INT     NOT NULL DEFAULT 0,
+
+    next_retry_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_error    TEXT,
+
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_outbox_tasks_status_next_retry
+    ON pipeline.outbox_tasks(status, next_retry_at);
+
+
+CREATE INDEX IF NOT EXISTS idx_outbox_tasks_dataset_layer_partition
+    ON pipeline.outbox_tasks(dataset, layer, partition_key);
+
+
 ------------- GRANTS FOR admin1
 
 GRANT USAGE ON SCHEMA mart TO admin1;
 
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA mart TO admin1;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA mart TO admin1;
+
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA pipeline TO admin1;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA pipeline TO admin1;
