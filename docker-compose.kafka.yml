@@ -22,7 +22,7 @@ services:
 
 
   kafdrop:
-    image: obsidiandynamics/kafdrop:latest
+    image: obsidiandynamics/kafdrop:4.2.0
     container_name: kafdrop
     ports:
       - "9000:9000"

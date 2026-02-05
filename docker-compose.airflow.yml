@@ -1,5 +1,5 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.10.2
+  image: apache/airflow:3.1.7-python3.11
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__FERNET_KEY: "W1vZQO7U4vq7JjOvn6cs1g3_fA4Y4FxXw4J5y6j0zK8="
@@ -17,7 +17,7 @@ x-airflow-common: &airflow-common
 
 services:
   airflow_pgdb:
-    image: postgres:16
+    image: postgres:16.11
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root

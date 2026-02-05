@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16
+    image: postgres:16.11
     container_name: postgres_db
     restart: always
     ports:
@@ -17,7 +17,7 @@ services:
       - app_network
 
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.12
     container_name: pgadmin_panel
     restart: always
     ports:
