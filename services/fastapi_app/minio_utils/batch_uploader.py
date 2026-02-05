@@ -90,7 +90,6 @@ class BatchUploader:
             self.minio_manager.upload_file(self.bucket_name, object_name, parquet_file)
             info_logger.info("Upload to MinIO finished")
 
-            return object_name
 
         except Exception as e:
             error_logger.exception(f"Failed to upload batch to MinIO {e.args}")
