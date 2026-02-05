@@ -11,6 +11,7 @@ from minio.commonconfig import CopySource
 import os
 from exceptions_logging.logger import info_logger, error_logger, warn_logger
 
+
 @dataclass
 class MinioConfig:
     """
@@ -22,6 +23,7 @@ class MinioConfig:
     secret_key: str = "pass12345@"
     secure: bool = False
 
+
 @dataclass
 class MinioManager:
     """
@@ -32,6 +34,7 @@ class MinioManager:
     """
     config: MinioConfig
 
+
     def __post_init__(self):
         # Initialize MinIO client
         self.client = Minio(
@@ -41,8 +44,11 @@ class MinioManager:
             secure=self.config.secure
         )
 
+
     def ensure_bucket(self, bucket_name: str):
-        # Create bucket if it does not exist.
+        """
+        Ensure that the given bucket exists. Create it if needed.
+        """
         try:
             if not self.client.bucket_exists(bucket_name):
                 info_logger.info(
@@ -60,8 +66,11 @@ class MinioManager:
             )
             raise
 
+
     def upload_file(self, bucket_name: str, object_name: str, file_path: str):
-        # Upload file to a bucket.
+        """
+        Upload a local file to the given bucket under the given object_name.
+        """
         with open(file_path, "rb") as f:
             self.client.put_object(
                 bucket_name=bucket_name,
@@ -74,7 +83,9 @@ class MinioManager:
 
 
     def download_all_objects(self, bucket_name: str, download_path: str = None) -> dict:
-        # Download all objects from a bucket
+        """
+        Download all objects from a bucket.
+        """
         objects_data = {}
         for obj in self.client.list_objects(bucket_name, recursive=True):
             response = None
@@ -95,7 +106,9 @@ class MinioManager:
 
 
     def delete_all_objects(self, bucket_name: str):
-        # Delete all objects in a bucket.
+        """
+        Delete all objects in a bucket.(if bucket is not empty)
+        """
         objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name, recursive=True)]
         if objects_to_delete:
             delete_gen = map(lambda name: {"ObjectName": name}, objects_to_delete)
@@ -106,24 +119,28 @@ class MinioManager:
 
 
     def move_objects_to_bucket(self, source_bucket: str, target_bucket: str):
-        # Move all objects from one bucket to another
+        """
+        Move all objects from one bucket to another.
+        """
         self.ensure_bucket(target_bucket)
         info_logger.info(
             f"Moving all objects from bucket '{source_bucket}' to '{target_bucket}'"
         )
         try:
             for obj in self.client.list_objects(source_bucket, recursive=True):
-                source = CopySource(source_bucket, obj.object_name)
-                result = self.client.copy_object(bucket_name=target_bucket, object_name=obj.object_name, source=source)
                 self.client.remove_object(source_bucket, obj.object_name)
+
         except Exception:
             error_logger.exception(
                 f"Failed to move objects from '{source_bucket}' to '{target_bucket}'"
             )
             raise
 
+
 def get_minio_manager(config: MinioConfig = None) -> MinioManager:
-    # Return initialized MinioManager instance
+    """
+    Factory to create a MinioManager instance.
+    """
     if config is None:
         config = MinioConfig()
     return MinioManager(config)
