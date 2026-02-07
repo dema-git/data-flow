@@ -20,7 +20,7 @@
 ####################################################################
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 
 from sqlalchemy import create_engine, text
 
@@ -60,3 +60,81 @@ def update_processing_state(dataset: str, layer: str,
                 "id": last_processed_id,
             },
         )
+
+def fetch_pending_tasks(limit: int = 50) -> List[Dict]:
+    """
+    Fetch tasks from pipeline.outbox_tasks that are ready for execution.
+    Conditions:
+      - status = 'PENDING' or 'FAILED'
+      - attempts < 5
+    """
+    query = text(
+        """
+        SELECT 
+            id, event_type, dataset, layer, partition_key,
+            status, attempts, last_error, created_at, updated_at
+        FROM pipeline.outbox_tasks
+        WHERE (status = 'PENDING' OR status = 'FAILED')
+          AND layer = 'silver' attempts < 5
+        ORDER BY updated_at ASC
+        LIMIT :limit
+        """
+    )
+
+    with engine.begin() as conn:
+        rows = conn.execute(query, {"limit": limit}).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def mark_task_in_progress(task_id: int) -> None:
+    """
+    Mark the task as IN_PROGRESS.
+    """
+    query = text(
+        """
+        UPDATE pipeline.outbox_tasks
+        SET status = 'IN_PROGRESS',
+            attempts = attempts + 1,
+            updated_at = NOW()
+        WHERE id = :id
+        """
+    )
+
+    with engine.begin() as conn:
+        conn.execute(query, {"id": task_id})
+
+
+def mark_task_done(task_id: int) -> None:
+    """
+    Mark the task as DONE after successful processing.
+    """
+    query = text(
+        """
+        UPDATE pipeline.outbox_tasks
+        SET status = 'DONE',
+            updated_at = NOW()
+        WHERE id = :id
+        """
+    )
+
+    with engine.begin() as conn:
+        conn.execute(query, {"id": task_id})
+
+
+def mark_task_failed(task_id: int, error_message: str) -> None:
+    """
+    Mark task as FAILED and store the error message.
+    """
+    query = text(
+        """
+        UPDATE pipeline.outbox_tasks
+        SET status = 'FAILED',
+            last_error = :err,
+            updated_at = NOW()
+        WHERE id = :id
+        """
+    )
+
+    with engine.begin() as conn:
+        conn.execute(query, {"id": task_id, "err": error_message[:500]})
