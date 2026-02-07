@@ -32,6 +32,7 @@ from services.faker.config import FakerConfig
 from services.faker.generator import SessionEventFaker
 from services.medallion_pipeline.medallion_service import run_bronze_to_silver, run_silver_to_gold
 
+from services.medallion_pipeline.gold_loader import process_gold_outbox_tasks
 from services.kafka.producer import KafkaProducerContext
 from services.medallion_models.bronze_model import BronzeWebEvent
 from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
@@ -78,6 +79,7 @@ def kafka_consumer():
     try:
         run_bronze_to_silver()
         run_silver_to_gold()
+        process_gold_outbox_tasks()
     except MinIOException as e:
         raise HTTPException(status_code=500, detail=e.message)
     except KafkaException as e:
