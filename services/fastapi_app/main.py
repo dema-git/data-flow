@@ -1,33 +1,28 @@
 #####################################################################################
 # main.py (fast-api)
 #
-# Main FastAPI application entry point.
+# Main application file that starts and configures the FastAPI server.
 #
-# This file initializes the FastAPI app for the "Llama Kafka & MinIO API" project.
-# It sets up the application metadata (title, description, version) and includes
-# all API routers for handling integrations and PostgreSQL data retrieval.
+# This file does several important things:
+# - Creates the FastAPI application with basic settings
+# - Starts a Kafka producer to send events
+# - Starts a Kafka consumer to read events
+# - Runs a background task that generates fake session data every 10 seconds
+# - Includes all API route modules (integrations, analytics, faker)
 #
-# Routers included:
-# - integrations_routes: Handles external integrations and data processing.
-# - user_session_event_routes: Handles fetching data from PostgreSQL.
-# - faker_generator_route: Faker-based session generator demo endpoints.
+# The background task automatically creates test sessions and sends them to Kafka
+# while the application is running.
 #####################################################################################
 
 import asyncio
 import logging
-
 from fastapi import FastAPI
-
-from api import integrations_routes, user_session_event_routes, faker_generator_route
+from api import integrations_routes, analytics_routes, faker_generator_route
 from services.faker.generator import SessionEventFaker
 from services.faker.config import FakerConfig
 from services.kafka.consumer import start_consumer_loop
-from services.kafka.producer import (
-    KafkaProducerContext,
-    start_producer,
-    stop_producer,
-    send_session_event,
-)
+from services.kafka.producer import (KafkaProducerContext, start_producer,
+                                        stop_producer, send_session_event,)
 
 
 logging.basicConfig(
@@ -38,8 +33,15 @@ logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
-    title="Llama Kafka & MinIO API",
-    description="API for generating sessions via Faker, sending to Kafka, and storing/retrieving from MinIO",
+    title="Medallion ETL Pipeline API",
+    description=(
+        "API for the end-to-end processing of user session events:\n"
+        "- Kafka ingestion into the Bronze layer\n"
+        "- Data cleaning and normalization into the Silver layer\n"
+        "- Business transformations into the Gold layer\n"
+        "- Storage in MinIO and PostgreSQL analytical marts\n"
+        "- Analytics endpoints for sessions, products, and landing pages"
+    ),
     version="1.0.0",
 )
 
@@ -55,14 +57,16 @@ kafka_ctx = KafkaProducerContext()
 _background_task: asyncio.Task | None = None
 
 
-async def background_loop(
-    interval_seconds: int = 10,
-    sessions_per_batch: int = 5,
-) -> None:
+async def background_loop(interval_seconds: int = 10,
+                            sessions_per_batch: int = 5,) -> None:
     """
-    Simple background loop:
-    - every N seconds generate batch of sessions
-    - send each event to Kafka
+    Background task that runs continuously while the app is running.
+
+    Every 10 seconds it does:
+    1. Generate a batch of fake session events (5 sessions by default)
+    2. Send each event to Kafka topic
+
+    This creates a constant stream of test data for development and testing.
     """
     logger.info(
         "Background loop started (interval=%s, sessions_per_batch=%s)",
@@ -92,6 +96,9 @@ async def background_loop(
 
 @app.on_event("startup")
 async def on_startup():
+    """
+    Runs when the application starts.
+    """
     global _background_task
 
     logger.info("App startup: starting Kafka producer and background loop")
@@ -103,6 +110,9 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    """
+    Runs when the application stops.
+    """
     global _background_task
 
     logger.info("App shutdown: stopping background loop and Kafka producer")
@@ -117,7 +127,8 @@ async def on_shutdown():
     stop_producer(kafka_ctx)
 
 
+# All route modules of application
 app.include_router(integrations_routes.router)
-# app.include_router(user_session_event_routes.router)
+app.include_router(analytics_routes.router)
 app.include_router(faker_generator_route.router)
 
