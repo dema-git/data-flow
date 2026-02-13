@@ -5,5 +5,5 @@ minio==7.2.20
 pandas==3.0.0
 faker==40.1.2
 pyarrow==23.0.0
-SQLAlchemy==2.0.0
+SQLAlchemy==2.0.46
 psycopg2-binary==2.9.11
