@@ -12,8 +12,7 @@
 
 from dataclasses import asdict
 from typing import List, Dict
-from minio_utils.files_handler import (get_files_data, upload_batch,
-                                       move_files_to_another_bucket)
+from minio_utils.files_handler import get_files_data, upload_batch
 
 from services.medallion_pipeline.outbox import enqueue_archive_task
 from services.medallion_pipeline.pipeline_state import update_processing_state

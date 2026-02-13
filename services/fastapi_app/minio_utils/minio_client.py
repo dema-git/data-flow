@@ -122,24 +122,6 @@ class MinioManager:
             print(f"Bucket '{bucket_name}' is already empty.")
 
 
-    def move_objects_to_bucket(self, source_bucket: str, target_bucket: str):
-        """
-        Move all objects from one bucket to another.
-        """
-        self.ensure_bucket(target_bucket)
-        info_logger.info(
-            f"Moving all objects from bucket '{source_bucket}' to '{target_bucket}'"
-        )
-        try:
-            for obj in self.client.list_objects(source_bucket, recursive=True):
-                self.client.remove_object(source_bucket, obj.object_name)
-
-        except Exception:
-            error_logger.exception(
-                f"Failed to move objects from '{source_bucket}' to '{target_bucket}'"
-            )
-            raise
-
     def move_single_object(self, source_bucket: str, target_bucket: str, object_name: str) -> None:
         """
         Move a single object from one MinIO bucket to another.

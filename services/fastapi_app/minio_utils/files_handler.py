@@ -4,7 +4,6 @@
 # High-level helpers over MinIO for this project:
 # - upload_batch(...)  → write events as Parquet
 # - get_files_data(...) → read Parquet into Python dicts
-# - move_files_to_another_bucket(...) → bulk move between buckets
 # - delete_all_objects(...) → clean bucket
 ##############################################################################
 
@@ -73,13 +72,6 @@ def get_files_data(bucket_name: str) -> List[Dict]:
         info_logger.info(f"Successfully read file {object_name} with {len(df)} records")
 
     return arr
-
-
-def move_files_to_another_bucket(source_bucket: str, target_bucket: str) -> None:
-    """
-    Move all files from one bucket to another (bulk).
-    """
-    manager.move_objects_to_bucket(source_bucket, target_bucket)
 
 
 def delete_all_objects(bucket_name: str) -> None:
