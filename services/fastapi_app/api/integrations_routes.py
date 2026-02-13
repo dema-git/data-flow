@@ -16,7 +16,7 @@
 ################################################################################
 
 from fastapi import APIRouter, HTTPException
-from minio_utils.files_handler import move_files_to_another_bucket, get_files_data, upload_batch
+from minio_utils.files_handler import get_files_data, upload_batch
 from db_utils.helpers import process_records
 from db_utils.database import get_db_session
 from exceptions_logging.custom_exceptions import MinIOException, KafkaException
