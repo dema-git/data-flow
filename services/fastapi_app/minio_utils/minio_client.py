@@ -1,8 +1,12 @@
 ##################################################################################
 # minio_client.py
 #
-# Provides MinioConfig and MinioManager for basic bucket and object operations:
-# upload, download, move and delete objects.
+# It contains basic MinIO operations such as:
+# - creating and checking buckets
+# - uploading objects
+# - downloading objects
+# - moving objects between buckets
+# - deleting objects
 ###################################################################################
 
 from dataclasses import dataclass
@@ -133,6 +137,34 @@ class MinioManager:
         except Exception:
             error_logger.exception(
                 f"Failed to move objects from '{source_bucket}' to '{target_bucket}'"
+            )
+            raise
+
+    def move_single_object(self, source_bucket: str, target_bucket: str, object_name: str) -> None:
+        """
+        Move a single object from one MinIO bucket to another.
+
+        Steps:
+        1. Ensure the target bucket exists (create if needed).
+        2. Copy the object from source bucket to target bucket.
+        3. Remove the object from the source bucket.
+        """
+        info_logger.info(
+            f"Moving object '{object_name}' from '{source_bucket}' to '{target_bucket}'"
+        )
+        try:
+            self.ensure_bucket(target_bucket)
+            src = CopySource(source_bucket, object_name)
+            self.client.copy_object(
+                bucket_name=target_bucket,
+                object_name=object_name,
+                source=src,
+            )
+            self.client.remove_object(source_bucket, object_name)
+        except Exception as e:
+            error_logger.exception(
+                f"Failed to move object '{object_name}' "
+                f"from '{source_bucket}' to '{target_bucket}': {e}"
             )
             raise
 
