@@ -12,30 +12,24 @@
 # - Background thread to continuously poll messages.
 ##########################################################
 
-from confluent_kafka import Consumer, KafkaError, KafkaException
 import threading
 import json
 import time
 import os
-from typing import Any, Dict, List
+from confluent_kafka import Consumer, KafkaError, KafkaException
+from typing import Any, Dict, List, Optional
 from collections import defaultdict
-
 from confluent_kafka import Consumer, KafkaError, KafkaException, TopicPartition
-
 from services.medallion_pipeline.bronze_writer import save_bronze_events
 from services.medallion_models.bronze_model import BronzeWebEvent
+from exceptions_logging.logger import AppLogger
+
+
+log = AppLogger(component="kafka_consumer")
 
 KAFKA_TOPICS = ["sessions_raw"]
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BROKERCONNECT", "kafka:9092")
 KAFKA_GROUP_ID = "kafka-consumer"
-
-
-print(
-    f"[KAFKA_CONSUMER] BOOTSTRAP={KAFKA_BOOTSTRAP!r}, "
-    f"TOPICS={KAFKA_TOPICS}, GROUP_ID={KAFKA_GROUP_ID}",
-    flush=True,
-)
-
 
 message_queue: List[Dict[str, Any]] = []
 queue_lock = threading.Lock()
@@ -95,35 +89,37 @@ def _commit_offsets(consumer: Consumer, batch: List[Dict[str, Any]]) -> None:
 
     try:
         consumer.commit(offsets=tps)
+        log.info(
+            "kafka offsets committed",
+            partitions_count=len(tps),
+            batch_size=len(batch),
+        )
     except KafkaException:
-        pass
+        log.exception(f"kafka offsets commit failed: {e.args}", batch_size=len(batch))
 
 
 def _flush_bronze_batch(consumer: Consumer, pending_batch: List[Dict[str, Any]]) -> None:
     if not pending_batch:
-        print("[BRONZE] Flush called but batch empty → skip", flush=True)
+        log.debug("flush called with empty batch")
         return
 
-    print(f"[BRONZE] Flushing {len(pending_batch)} messages to Bronze...", flush=True)
+    log.info("bronze flush started", batch_size=len(pending_batch))
 
     try:
         bronze_events = [BronzeWebEvent(**msg["data"]) for msg in pending_batch]
-        print(f"[BRONZE] Bronze events built: {len(bronze_events)}", flush=True)
 
         # Upload to MinIO
         save_bronze_events(bronze_events)
-        print("[BRONZE] Bronze upload SUCCESS", flush=True)
+        log.info("bronze flush done", batch_size=len(pending_batch))
 
         # Commit offsets
         _commit_offsets(consumer, pending_batch)
-        print("[BRONZE] Kafka offsets committed", flush=True)
 
     except Exception as e:
-        print(f"[BRONZE] ERROR during flush: {e}", flush=True)
+        log.exception(f"bronze flush failed: {e.args}", batch_size=len(pending_batch))
         return
 
     pending_batch.clear()
-    print("[BRONZE] Batch cleared", flush=True)
 
 
 def _enqueue_message(msg_dict: Dict[str, Any]) -> None:
@@ -157,16 +153,23 @@ def consume_loop() -> None:
     BATCH_SIZE = 100     # flush every 100 messages
     FLUSH_SECONDS = 5.0  # or every 5 seconds
 
-    print("[KAFKA] Consumer loop started", flush=True)
+    log.info(
+        "consumer loop started",
+        bootstrap=KAFKA_BOOTSTRAP,
+        topics=KAFKA_TOPICS,
+        group_id=KAFKA_GROUP_ID,
+        batch_size=BATCH_SIZE,
+        flush_seconds=FLUSH_SECONDS,
+    )
 
     while True:
-        consumer: Consumer | None = None
+        consumer: Optional[Consumer] = None
 
         try:
             consumer = create_consumer()
             consumer.subscribe(KAFKA_TOPICS)
 
-            print(f"[KAFKA] Subscribed to topics: {KAFKA_TOPICS}", flush=True)
+            log.info("subscribed to topics", topics=KAFKA_TOPICS)
 
             pending_bronze: List[Dict[str, Any]] = []
             last_flush_time = time.time()
@@ -176,44 +179,46 @@ def consume_loop() -> None:
 
                 if msg is None:
                     if pending_bronze and (time.time() - last_flush_time >= FLUSH_SECONDS):
-                        print(f"[KAFKA] Time flush triggered. Pending batch: {len(pending_bronze)}", flush=True)
+                        log.info("time flush triggered", pending_size=len(pending_bronze))
                         _flush_bronze_batch(consumer, pending_bronze)
                         last_flush_time = time.time()
                     continue
 
                 if msg.error():
-                    print(f"[KAFKA] ERROR msg.error(): {msg.error()}", flush=True)
                     if msg.error().code() == KafkaError._PARTITION_EOF:
                         continue
+                    log.warning("kafka poll error", error=str(msg.error()))
                     continue
 
                 decoded = _decode_message(msg)
                 if decoded is None:
-                    print("[KAFKA] Message decode FAILED → skipped", flush=True)
+                    log.warning(
+                        "message decode failed",
+                        topic=msg.topic(),
+                        partition=msg.partition(),
+                        offset=msg.offset(),
+                    )
                     continue
 
-                print(f"[KAFKA] Received message: topic={msg.topic()}, partition={msg.partition()}, offset={msg.offset()}", flush=True)
                 _enqueue_message(decoded)
 
                 pending_bronze.append(decoded)
 
-                print(f"[KAFKA] Added to pending_bronze → total={len(pending_bronze)}", flush=True)
-
                 if len(pending_bronze) >= BATCH_SIZE:
-                    print(f"[KAFKA] Batch size flush triggered. Pending batch: {len(pending_bronze)}", flush=True)
+                    log.info("batch size flush triggered", pending_size=len(pending_bronze))
                     _flush_bronze_batch(consumer, pending_bronze)
                     last_flush_time = time.time()
 
         except Exception as e:
-            print(f"[KAFKA] Consumer crashed: {e}", flush=True)
+            log.exception(f"consumer crashed: {e.args}")
 
         finally:
             if consumer:
                 try:
                     consumer.close()
-                    print("[KAFKA] Consumer closed", flush=True)
-                except KafkaException:
-                    print("[KAFKA] Consumer close failed", flush=True)
+                    log.info("consumer closed")
+                except KafkaException as e:
+                    log.exception(f"consumer close failed: {e.args}")
 
             time.sleep(3)
 
@@ -224,3 +229,4 @@ def start_consumer_loop() -> None:
     """
     t = threading.Thread(target=consume_loop, daemon=True)
     t.start()
+    log.info("consumer background thread started")
