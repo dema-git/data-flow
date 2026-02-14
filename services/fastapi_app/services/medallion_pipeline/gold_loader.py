@@ -1,21 +1,33 @@
+######################################################################
+# gold_loader.py
+#
+# This module is responsible for loading data into the GOLD layer.
+#
+# It performs the following steps:
+# - reads Parquet files from MinIO (gold buckets)
+# - converts rows into GoldPageView and GoldProductEvent models
+# - inserts data into mart.gold_page_views and mart.gold_product_events
+# - creates archive tasks for successfully processed files
+#
+# The module is used as part of the medallion pipeline to move data
+# from object storage into the analytical database layer.
+#######################################################################
 
-import logging
 import math
 from dataclasses import asdict
 from typing import List, Dict
 
 from sqlalchemy import create_engine, text
-
+from sqlalchemy.exc import SQLAlchemyError
 from minio_utils.files_handler import get_files_data
-from services.medallion_pipeline.medallion_service import GOLD_PAGE_VIEWS_BUCKET
-from services.medallion_pipeline.pipeline_state import fetch_pending_tasks, mark_task_done
-
+from services.medallion_pipeline.pipeline_state import (fetch_pending_tasks,
+                                                        mark_task_done)
 from services.medallion_pipeline.outbox import enqueue_archive_task
-
-from exceptions_logging.logger import info_logger, error_logger
-
+from exceptions_logging.logger import AppLogger
 from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
 
+
+log = AppLogger(component="gold_loader")
 
 DATABASE_URL = "postgresql+psycopg2://admin1:pass12345%40@db:5432/main"
 
@@ -28,51 +40,58 @@ def insert_gold_page_views(events: List[GoldPageView]) -> int:
     Insert a list of GoldPageView instances into mart.gold_page_views.
     """
     if not events:
+        log.warning("insert_gold_page_views called with empty list")
         return 0
 
     rows = [asdict(e) for e in events]
     total = 0
 
-    info_logger.info(f"[GOLD] insert_page_views: total_rows={len(rows)}")
+    log.info("insert_gold_page_views started", total_rows=len(rows),
+             batch_size=BATCH_SIZE)
+    try:
+        with engine.begin() as conn:
+            for start in range(0, len(rows), BATCH_SIZE):
+                chunk = rows[start : start + BATCH_SIZE]
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO mart.gold_page_views (
+                            event_time,
+                            session_id,
+                            user_id,
+                            page_url,
+                            page_category,
+                            page_item,
+                            scroll_depth,
+                            ab_group
+                        )
+                        VALUES (
+                            :event_time,
+                            :session_id,
+                            :user_id,
+                            :page_url,
+                            :page_category,
+                            :page_item,
+                            :scroll_depth,
+                            :ab_group
+                        )
+                        """
+                    ),
+                    chunk,
+                )
+                total += len(chunk)
 
-    with engine.begin() as conn:
-        for start in range(0, len(rows), BATCH_SIZE):
-            chunk = rows[start : start + BATCH_SIZE]
-            info_logger.info(
-                f"[GOLD] insert_page_views chunk "
-                f"{start}..{start + len(chunk) - 1}"
-            )
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO mart.gold_page_views (
-                        event_time,
-                        session_id,
-                        user_id,
-                        page_url,
-                        page_category,
-                        page_item,
-                        scroll_depth,
-                        ab_group
-                    )
-                    VALUES (
-                        :event_time,
-                        :session_id,
-                        :user_id,
-                        :page_url,
-                        :page_category,
-                        :page_item,
-                        :scroll_depth,
-                        :ab_group
-                    )
-                    """
-                ),
-                chunk,
-            )
-            total += len(chunk)
+        log.info("insert_gold_page_views done", inserted=total)
+        return total
 
-    info_logger.info(f"[GOLD] insert_page_views done, inserted={total}")
-    return total
+    except SQLAlchemyError as e:
+        log.exception(f"insert_gold_page_views database error: {e.args}",
+                      total_rows=len(rows))
+        raise
+    except Exception as e:
+        log.exception(f"insert_gold_page_views unexpected error: {e.args}",
+                      total_rows=len(rows))
+        raise
 
 
 def insert_gold_product_events(events: List[GoldProductEvent]) -> int:
@@ -85,44 +104,48 @@ def insert_gold_product_events(events: List[GoldProductEvent]) -> int:
     rows = [asdict(e) for e in events]
     total = 0
 
-    info_logger.info(f"[GOLD] insert_product_events: total_rows={len(rows)}")
+    log.info("insert_gold_product_events started", total_rows=len(rows),
+             batch_size=BATCH_SIZE)
+    try:
+        with engine.begin() as conn:
+            for start in range(0, len(rows), BATCH_SIZE):
+                chunk = rows[start : start + BATCH_SIZE]
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO mart.gold_product_events (
+                            event_time,
+                            session_id,
+                            user_id,
+                            product_id,
+                            price,
+                            ab_group,
+                            page_url
+                        )
+                        VALUES (
+                            :event_time,
+                            :session_id,
+                            :user_id,
+                            :product_id,
+                            :price,
+                            :ab_group,
+                            :page_url
+                        )
+                        """
+                    ),
+                    chunk,
+                )
+                total += len(chunk)
 
-    with engine.begin() as conn:
-        for start in range(0, len(rows), BATCH_SIZE):
-            chunk = rows[start : start + BATCH_SIZE]
-            info_logger.info(
-                f"[GOLD] insert_product_events chunk "
-                f"{start}..{start + len(chunk) - 1}"
-            )
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO mart.gold_product_events (
-                        event_time,
-                        session_id,
-                        user_id,
-                        product_id,
-                        price,
-                        ab_group,
-                        page_url
-                    )
-                    VALUES (
-                        :event_time,
-                        :session_id,
-                        :user_id,
-                        :product_id,
-                        :price,
-                        :ab_group,
-                        :page_url
-                    )
-                    """
-                ),
-                chunk,
-            )
-            total += len(chunk)
-
-    info_logger.info(f"[GOLD] insert_product_events done, inserted={total}")
-    return total
+        log.info("insert_gold_product_events done", inserted=total)
+        return total
+    except SQLAlchemyError:
+        log.exception("insert_gold_product_events database error", total_rows=len(rows))
+        raise
+    except Exception as e:
+        log.exception(f"insert_gold_product_events unexpected error: {e.args}",
+                      total_rows=len(rows))
+        raise
 
 
 GOLD_PAGE_VIEWS_BUCKET = "events-gold-page-views"
@@ -138,64 +161,58 @@ def clean_nan(d: dict) -> dict:
     return cleaned
 
 def process_gold_outbox_tasks() -> Dict[str, int]:
-    print("GOLD START")
-    info_logger.info(
-        f"[GOLD] started"
+    """
+    - Read gold parquet files from MinIO
+    - Convert rows to Gold models
+    - Insert into mart tables
+    - Enqueue archive tasks per processed object
+    """
+    log.info(
+        "process_gold_outbox_tasks started",
+        page_views_bucket=GOLD_PAGE_VIEWS_BUCKET,
+        product_events_bucket=GOLD_PRODUCT_VIEWS_BUCKET,
+        batch_size=BATCH_SIZE,
     )
-
-
-    page_view_files = get_files_data(GOLD_PAGE_VIEWS_BUCKET)
-    product_event_files = get_files_data(GOLD_PRODUCT_VIEWS_BUCKET)
-
-    print(
-        f"[GOLD] files: page_views={len(page_view_files)}, "
-        f"products={len(product_event_files)}"
-    )
-    page_views: List[GoldPageView] = []
-    product_events: List[GoldProductEvent] = []
-
-
-    for f in page_view_files:
-        for row in f["data"]:
-            row = clean_nan(row)
-            page_views.append(GoldPageView(**row))
-
-
-    for f in product_event_files:
-        for row in f["data"]:
-            product_events.append(GoldProductEvent(**row))
-
-
-    info_logger.info(
-        f"[GOLD] page_views: {len(product_events)}"
-    )
-    info_logger.info(
-        f"[GOLD] product_events {len(product_events)}"
-    )
-    if not page_views and not product_events:
-        info_logger.info(
-            f"[GOLD] return"
-        )
-        return {
-            "inserted_page_views": 0,
-            "inserted_product_events": 0,
-            "page_view_files": len(page_view_files),
-            "product_event_files": len(product_event_files),
-        }
 
     try:
+        # Download all Parquet files from GOLD buckets in MinIO
+        page_view_files = get_files_data(GOLD_PAGE_VIEWS_BUCKET)
+        product_event_files = get_files_data(GOLD_PRODUCT_VIEWS_BUCKET)
 
-        info_logger.info(
-            f"[GOLD] try to insert"
-        )
+        # These lists will contain validated Gold model instances
+        page_views: List[GoldPageView] = []
+        product_events: List[GoldProductEvent] = []
 
+        #Parse page view files and convert rows into GoldPageView objects
+        for f in page_view_files:
+            for row in f["data"]:
+                row = clean_nan(row)
+                page_views.append(GoldPageView(**row))
+
+        #  Parse product event files and convert rows into GoldProductEvent objects
+        for f in product_event_files:
+            for row in f["data"]:
+                product_events.append(GoldProductEvent(**row))
+
+        # If no rows were parsed from files, stop processing
+        if not page_views and not product_events:
+            log.warning(
+                "no gold files found",
+                page_view_files=len(page_view_files),
+                product_event_files=len(product_event_files),
+            )
+            return {
+                "inserted_page_views": 0,
+                "inserted_product_events": 0,
+                "page_view_files": len(page_view_files),
+                "product_event_files": len(product_event_files),
+            }
+
+        # Insert parsed rows into the GOLD database tables (batched)
         inserted_pv = insert_gold_page_views(page_views) if page_views else 0
         inserted_pe = insert_gold_product_events(product_events) if product_events else 0
 
-        info_logger.info(
-            f"[GOLD] inserted"
-        )
-
+        # After successful DB insert, enqueue archive tasks
         for f in page_view_files:
             enqueue_archive_task(
                 dataset="web_events",
@@ -211,16 +228,23 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
                 partition_key=f["object_name"],
                 event_type="ARCHIVE",
             )
-        print(f"[GOLD] GOLD DB load success")
-    except Exception as e:
+        log.info(
+            "process_gold_outbox_tasks done",
+            page_view_files=len(page_view_files),
+            product_event_files=len(product_event_files),
+        )
 
-        print(f"[ERROR] GOLD DB load failed: {e}")
+    except Exception as e:
+        log.exception(
+            f"process_gold_outbox_tasks failed: {e.args}",
+        )
         return {
             "inserted_page_views": 0,
             "inserted_product_events": 0,
-            "page_view_files": len(page_view_files),
-            "product_event_files": len(product_event_files),
+            "page_view_files": 0,
+            "product_event_files": 0,
         }
+
 
     return {
         "inserted_page_views": inserted_pv,
