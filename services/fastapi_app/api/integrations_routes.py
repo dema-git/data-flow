@@ -52,9 +52,14 @@ kafka_ctx = KafkaProducerContext()
 )
 def run_full_etl():
     try:
-        run_bronze_to_silver()
-        run_silver_to_gold()
-        process_gold_outbox_tasks()
+        bronze_to_silver = run_bronze_to_silver()
+        silver_to_gold = run_silver_to_gold()
+        gold = process_gold_outbox_tasks()
+        return {
+            "bronze_to_silver": bronze_to_silver,
+            "silver_to_gold": silver_to_gold,
+            "gold_loader": gold,
+        }
     except MinIOException as e:
         raise HTTPException(status_code=500, detail=e.message)
     except KafkaException as e:
