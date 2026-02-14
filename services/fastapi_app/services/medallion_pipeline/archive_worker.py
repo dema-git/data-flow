@@ -17,7 +17,7 @@
 #####################################################################
 
 from typing import Dict
-
+from minio.error import S3Error
 from minio_utils.minio_client import get_minio_manager
 from services.medallion_pipeline.pipeline_state import (
     fetch_pending_tasks,
@@ -99,7 +99,11 @@ def run_archive_worker(limit: int = 50) -> Dict[str, int]:
 
         try:
             #2 Mark task as IN_PROGRESS
-            mark_task_in_progress(task.id)
+            claimed = mark_task_in_progress(task.id)
+
+            if not claimed:
+                skipped += 1
+                continue
 
             #3. Move object from source to archive bucket
             minio_manager.move_single_object(
@@ -111,6 +115,15 @@ def run_archive_worker(limit: int = 50) -> Dict[str, int]:
             #4. Mark task as DONE on success
             mark_task_done(task.id)
             archived += 1
+
+        except S3Error as e:
+            if e.code == "NoSuchKey":
+                mark_task_done(task.id)
+                skipped += 1
+                continue
+
+            mark_task_failed(task.id, f"S3Error {e.code}: {e.message}")
+            failed += 1
 
         except Exception as e:
             mark_task_failed(task.id, str(e))
