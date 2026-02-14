@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from minio import Minio
 from minio.commonconfig import CopySource
 import os
-from exceptions_logging.logger import info_logger, error_logger, warn_logger
+from exceptions_logging.logger import AppLogger
 
+
+log = AppLogger(component="minio_manager")
 
 @dataclass
 class MinioConfig:
@@ -41,12 +43,21 @@ class MinioManager:
 
     def __post_init__(self):
         # Initialize MinIO client
-        self.client = Minio(
-            self.config.host,
-            access_key=self.config.access_key,
-            secret_key=self.config.secret_key,
-            secure=self.config.secure
-        )
+        try:
+            self.client = Minio(
+                self.config.host,
+                access_key=self.config.access_key,
+                secret_key=self.config.secret_key,
+                secure=self.config.secure
+            )
+            log.info(
+                "minio client initialized",
+                host=self.config.host,
+                secure=self.config.secure,
+            )
+        except Exception:
+            log.exception("failed to initialize minio client")
+            raise
 
 
     def ensure_bucket(self, bucket_name: str):
@@ -55,19 +66,13 @@ class MinioManager:
         """
         try:
             if not self.client.bucket_exists(bucket_name):
-                info_logger.info(
-                    f"Creating bucket '{bucket_name}'"
-                )
+                log.info("creating bucket", bucket_name=bucket_name)
                 self.client.make_bucket(bucket_name)
             else:
-                info_logger.info(
-                    f"Bucket '{bucket_name}' already exists"
-                )
+                log.debug("bucket already exists", bucket_name=bucket_name)
 
         except Exception:
-            error_logger.exception(
-                f"Failed to ensure bucket '{bucket_name}'"
-            )
+            log.exception("ensure_bucket failed", bucket_name=bucket_name)
             raise
 
 
@@ -75,51 +80,89 @@ class MinioManager:
         """
         Upload a local file to the given bucket under the given object_name.
         """
-        with open(file_path, "rb") as f:
-            self.client.put_object(
+        try:
+            with open(file_path, "rb") as f:
+                self.client.put_object(
+                    bucket_name=bucket_name,
+                    object_name=object_name,
+                    data=f,
+                    length=os.path.getsize(file_path),
+                    content_type="application/octet-stream"
+                )
+        except Exception as e:
+            log.exception(
+                f"upload_file failed: {e.args}",
                 bucket_name=bucket_name,
                 object_name=object_name,
-                data=f,
-                length=os.path.getsize(file_path),
-                content_type="application/octet-stream"
             )
-        print(f"Uploaded {object_name} to bucket {bucket_name}")
+            raise
 
 
     def download_all_objects(self, bucket_name: str, download_path: str = None) -> dict:
         """
         Download all objects from a bucket.
+
+        If download_path is provided:
+            Files are written to disk.
+        Otherwise:
+            Raw bytes are returned in a dictionary.
         """
         objects_data = {}
-        for obj in self.client.list_objects(bucket_name, recursive=True):
-            response = None
-            try:
-                response = self.client.get_object(bucket_name, obj.object_name)
-                if download_path:
-                    file_path = os.path.join(download_path, obj.object_name)
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    with open(file_path, "wb") as f:
-                        for chunk in response.stream(32 * 1024):
-                            f.write(chunk)
-                else:
-                    objects_data[obj.object_name] = response.read()
-            finally:
-                if response:
-                    response.close()
-        return objects_data
+
+        try:
+            log.info("download_all_objects started", bucket_name=bucket_name)
+
+            objects = list(self.client.list_objects(bucket_name, recursive=True))
+
+            if not objects:
+                log.warning("bucket is empty", bucket_name=bucket_name)
+
+            for obj in self.client.list_objects(bucket_name, recursive=True):
+                response = None
+                try:
+                    response = self.client.get_object(bucket_name, obj.object_name)
+                    if download_path:
+                        file_path = os.path.join(download_path, obj.object_name)
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        with open(file_path, "wb") as f:
+                            for chunk in response.stream(32 * 1024):
+                                f.write(chunk)
+                        log.debug(
+                            "object downloaded to disk",
+                            bucket_name=bucket_name,
+                            object_name=obj.object_name,
+                        )
+                    else:
+                        objects_data[obj.object_name] = response.read()
+                finally:
+                    if response:
+                        response.close()
+
+            log.info(
+                "download_all_objects done",
+                bucket_name=bucket_name,
+                objects_count=len(objects),
+            )
+            return objects_data
+
+        except Exception:
+            log.exception("download_all_objects failed", bucket_name=bucket_name)
+            raise
 
 
     def delete_all_objects(self, bucket_name: str):
         """
         Delete all objects in a bucket.(if bucket is not empty)
         """
-        objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name, recursive=True)]
+        objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name,
+                                                                                 recursive=True)]
         if objects_to_delete:
             delete_gen = map(lambda name: {"ObjectName": name}, objects_to_delete)
             self.client.remove_objects(bucket_name, delete_gen)
-            print(f"Deleted all objects from bucket '{bucket_name}'")
+            # print(f"Deleted all objects from bucket '{bucket_name}'")
         else:
-            print(f"Bucket '{bucket_name}' is already empty.")
+            pass
+            # print(f"Bucket '{bucket_name}' is already empty.")
 
 
     def move_single_object(self, source_bucket: str, target_bucket: str, object_name: str) -> None:
@@ -131,10 +174,14 @@ class MinioManager:
         2. Copy the object from source bucket to target bucket.
         3. Remove the object from the source bucket.
         """
-        info_logger.info(
-            f"Moving object '{object_name}' from '{source_bucket}' to '{target_bucket}'"
-        )
+
         try:
+            log.info(
+                "move_single_object started",
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                object_name=object_name,
+            )
             self.ensure_bucket(target_bucket)
             src = CopySource(source_bucket, object_name)
             self.client.copy_object(
@@ -143,10 +190,18 @@ class MinioManager:
                 source=src,
             )
             self.client.remove_object(source_bucket, object_name)
+            log.info(
+                "move_single_object done",
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                object_name=object_name,
+            )
         except Exception as e:
-            error_logger.exception(
-                f"Failed to move object '{object_name}' "
-                f"from '{source_bucket}' to '{target_bucket}': {e}"
+            log.exception(
+                f"move_single_object failed: {e.args}",
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                object_name=object_name,
             )
             raise
 
