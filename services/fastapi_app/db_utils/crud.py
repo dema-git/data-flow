@@ -8,7 +8,10 @@
 
 from models import User, Session, Event
 from uuid import UUID
-from exceptions_logging.logger import info_logger, error_logger
+from exceptions_logging.logger import AppLogger
+
+
+log = AppLogger(component="crud")
 
 def get_or_create_user(db,
                        user_id: int,
@@ -27,17 +30,16 @@ def get_or_create_user(db,
 
         user = db.get(User, user_id)
         if not user:
-            info_logger.info(
-                f"Creating new user | user_id={user_id}"
-            )
+            log.info("creating new user", user_id=user_id)
             user = User(user_id=user_id)
             db.add(user)
 
         users_cache[user_id] = user
         return user
     except Exception as e:
-        error_logger.exception(
-            f"Failed to get or create user | user_id={user_id}"
+        log.exception(
+            "failed to get_or_create_user",
+            user_id=user_id
         )
         raise
 
@@ -62,8 +64,12 @@ def get_or_create_session(db,
         else:
             session = db.get(Session, session_id)
             if not session:
-                info_logger.info(
-                    f"Creating new session | session_id={session_id} user_id={user.user_id}"
+                log.info(
+                    "creating new session",
+                    session_id=str(session_id),
+                    user_id=user.user_id,
+                    browser=browser,
+                    device=device
                 )
                 session = Session(
                     session_id=session_id,
@@ -76,8 +82,10 @@ def get_or_create_session(db,
             return session
 
     except Exception as e:
-        error_logger.exception(
-            f"Failed to get or create session | session_id={session_id} user_id={user.user_id}"
+        log.exception(
+            "failed to get_or_create_session",
+            session_id=str(session_id),
+            user_id=user.user_id
         )
         raise
 
@@ -89,6 +97,12 @@ def create_event(db, session:
     Create a new Event and add it to the database session.
     """
     try:
+        if not event_type:
+            log.warning(
+                "creating event with empty event_type",
+                session_id=str(session.session_id)
+            )
+
         event = Event(
             session=session,
             timestamp=timestamp,
@@ -98,7 +112,9 @@ def create_event(db, session:
         return event
 
     except Exception:
-        error_logger.exception(
-            f"Failed to create event | session_id={session.session_id} type={event_type}"
+        log.exception(
+            "failed to create_event",
+            session_id=str(session.session_id),
+            event_type=event_type
         )
         raise
