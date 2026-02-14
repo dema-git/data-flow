@@ -18,7 +18,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
 from typing import Dict, Any, List
-from exceptions_logging.logger import info_logger, error_logger
+from exceptions_logging.logger import AppLogger
+
+
+log = AppLogger(component="session_services")
 
 
 def get_top_landing_pages_service(limit: int = 10) -> Dict[str, Any]:
@@ -28,7 +31,7 @@ def get_top_landing_pages_service(limit: int = 10) -> Dict[str, Any]:
     Returns: Dictionary with page statistics including URL, views, bounces,
     and bounce rate
     """
-    info_logger.info("Fetching top landing pages")
+    log.info("get_top_landing_pages started", limit=limit)
 
     sql = text(
         """
@@ -64,6 +67,7 @@ def get_top_landing_pages_service(limit: int = 10) -> Dict[str, Any]:
                 }
             )
 
+        log.info("get_top_landing_pages done", groups_count=len(pages))
         return {
             "data": {
                 "landing_pages": pages,
@@ -75,14 +79,10 @@ def get_top_landing_pages_service(limit: int = 10) -> Dict[str, Any]:
         }
 
     except SQLAlchemyError as e:
-        error_logger.exception(
-            f"Database error in get_top_landing_pages_service: {e.args}"
-        )
+        log.exception(f"get_top_landing_pages database error: {e.args}", limit=limit)
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
-        error_logger.exception(
-            f"Unexpected error in get_top_landing_pages_service: {e.args}"
-        )
+        log.exception(f"get_top_landing_pages unexpected error: {e.args}", limit=limit)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -92,7 +92,7 @@ def get_top_products_by_revenue_service(limit: int = 10) -> Dict[str, Any]:
     Returns: Dictionary with product IDs, event counts,
     and total revenue for each product
     """
-    info_logger.info("Fetching top products by revenue")
+    log.info("get_top_products_by_revenue started", limit=limit)
 
     try:
         with engine.begin() as conn:
@@ -125,6 +125,7 @@ def get_top_products_by_revenue_service(limit: int = 10) -> Dict[str, Any]:
                 }
             )
 
+        log.info("get_top_products_by_revenue done", groups_count=len(items))
         return {
             "data": {
                 "items": items,
@@ -136,14 +137,10 @@ def get_top_products_by_revenue_service(limit: int = 10) -> Dict[str, Any]:
         }
 
     except SQLAlchemyError as e:
-        error_logger.exception(
-            f"Database error while fetching top products: {e.args}"
-        )
+        log.exception(f"get_top_products_by_revenue database error: {e.args}", limit=limit)
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
-        error_logger.exception(
-            f"Unexpected error in get_top_products_by_revenue_service: {e.args}"
-        )
+        log.exception(f"get_top_products_by_revenue unexpected error: {e.args}", limit=limit)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -152,7 +149,7 @@ def get_ab_test_summary_service() -> Dict[str, Any]:
     Get summary statistics for A/B test groups.
     Returns: Dictionary with statistics for each A/B test group.
     """
-    info_logger.info("Fetching A/B test summary")
+    log.info("get_ab_test_summary started")
 
     sql = text(
         """
@@ -199,6 +196,8 @@ def get_ab_test_summary_service() -> Dict[str, Any]:
                 }
             )
 
+        log.info("get_ab_test_summary done", groups_count=len(groups))
+
         return {
             "data": {
                 "groups": groups,
@@ -209,15 +208,11 @@ def get_ab_test_summary_service() -> Dict[str, Any]:
         }
 
     except SQLAlchemyError as e:
-        error_logger.exception(
-            f"Database error in get_ab_test_summary_service: {e.args}"
-        )
+        log.exception(f"get_ab_test_summary database error: {e.args}")
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
-        error_logger.exception(
-            f"Unexpected error in get_ab_test_summary_service: {e.args}"
-        )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        log.exception(f"get_ab_test_summary unexpected error: {e.args}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e.args}")
 
 
 def get_user_sessions_overview_service(user_id: str, skip: int = 0,
@@ -227,7 +222,7 @@ def get_user_sessions_overview_service(user_id: str, skip: int = 0,
     Returns:   Dictionary with session information and pagination details
     """
 
-    info_logger.info("Fetching user sessions overview from GOLD")
+    log.info("get_user_sessions_overview started", user_id=user_id, skip=skip, limit=limit)
 
     # main query with pagination
     sql_sessions = text(
@@ -278,6 +273,7 @@ def get_user_sessions_overview_service(user_id: str, skip: int = 0,
                 }
             )
 
+        log.info("get_user_sessions_overview done", groups_count=len(sessions_data))
         return {
             "data": {
                 "sessions": sessions_data,
@@ -291,13 +287,19 @@ def get_user_sessions_overview_service(user_id: str, skip: int = 0,
         }
 
     except SQLAlchemyError as e:
-        error_logger.exception(
-            f"Database error in get_user_sessions_overview_service: {e.args}"
+        log.exception(
+            f"get_user_sessions_overview database error: {e.args}",
+            user_id=user_id,
+            skip=skip,
+            limit=limit,
         )
         raise HTTPException(status_code=500, detail="Database error")
     except Exception as e:
-        error_logger.exception(
-            f"Unexpected error in get_user_sessions_overview_service: {e.args}"
+        log.exception(
+            f"get_user_sessions_overview unexpected error: {e.args}",
+            user_id=user_id,
+            skip=skip,
+            limit=limit,
         )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e.args}")
 
