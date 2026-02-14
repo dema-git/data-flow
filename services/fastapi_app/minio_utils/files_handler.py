@@ -15,7 +15,9 @@ import pandas as pd
 from .minio_client import get_minio_manager
 from .batch_uploader import BatchUploader
 from exceptions_logging.custom_exceptions import MinIOException
-from exceptions_logging.logger import info_logger, error_logger
+from exceptions_logging.logger import AppLogger
+
+log = AppLogger(component="files_handler")
 
 manager = get_minio_manager()
 
@@ -24,11 +26,24 @@ def upload_batch(batch: List[List[Dict]], bucket_name="active-bucket") -> None:
     Helper to upload a batch of records to a MinIO bucket
     as a single Parquet file.
     """
+    if not batch:
+        log.warning("upload_batch called with empty batch", bucket_name=bucket_name)
+        return
+
     uploader = BatchUploader(manager, bucket_name)
+
+    log.info(
+        "upload_batch started",
+        bucket_name=bucket_name,
+        outer_batches=len(batch),
+    )
+
     try:
         uploader.upload_batch(batch)
+        log.info("upload_batch done", bucket_name=bucket_name)
     except Exception as e:
-        print("error: ", e.args)
+        log.exception(f"upload_batch failed: {e.args}", bucket_name=bucket_name)
+        raise
 
 
 def get_all_files_from_bucket(bucket_name: str) -> Dict[str, bytes]:
@@ -49,28 +64,41 @@ def get_files_data(bucket_name: str) -> List[Dict]:
         "data":        [ {column: value, ...}, ... ]
     }
     """
+    log.info("get_files_data started", bucket_name=bucket_name)
+
     files = get_all_files_from_bucket(bucket_name)
     arr = []
     for object_name, content in files.items():
-        info_logger.info(f"Reading parquet file {object_name} from bucket {bucket_name}")
         try:
             df = pd.read_parquet(BytesIO(content))
+
+            arr.append({
+                "object_name": object_name,
+                "filename": os.path.basename(object_name),
+                "data": df.to_dict(orient="records"),
+            })
+
+            log.info(
+                "parquet file parsed",
+                bucket_name=bucket_name,
+                object_name=object_name,
+            )
         except Exception as e:
-            error_logger.exception(
-                f"Failed to read parquet file '{object_name}' from bucket '{bucket_name}'"
+            log.exception(
+                f"failed to read parquet file: {e.args}",
+                bucket_name=bucket_name,
+                object_name=object_name,
             )
             raise MinIOException(
                 f"Failed to read parquet file '{object_name}' from bucket '{bucket_name}'"
-            ) from e
+            )
 
 
-        arr.append({
-            "object_name": object_name,
-            "filename": os.path.basename(object_name),
-            "data": df.to_dict(orient="records"),
-        })
-        info_logger.info(f"Successfully read file {object_name} with {len(df)} records")
-
+    log.info(
+        "get_files_data done",
+        bucket_name=bucket_name,
+        files_count=len(arr),
+    )
     return arr
 
 
@@ -78,4 +106,12 @@ def delete_all_objects(bucket_name: str) -> None:
     """
     Delete all objects from a bucket.
     """
-    manager.delete_all_objects(bucket_name)
+    log.warning("delete_all_objects called", bucket_name=bucket_name)
+
+    try:
+        manager.delete_all_objects(bucket_name)
+        log.info("delete_all_objects done", bucket_name=bucket_name)
+
+    except Exception as e:
+        log.exception(f"delete_all_objects failed: {e.args}", bucket_name=bucket_name)
+        raise
