@@ -1,55 +1,129 @@
-####################################################################
-# logger.py
+###########################################################
+# logging_config.py
 #
-# Returns a logger that writes to <LEVEL>.log (INFO.log, WARNING.log, ERROR.log)
-####################################################################
+# Simple structured logging (JSON) with 2 log files:
+# - /shared_logs/app.log   -> INFO and above
+# - /shared_logs/error.log -> ERROR and above
+#
+# Also prints logs to console (stdout) in JSON format.
+###########################################################
 
+import json
 import logging
 import os
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from typing import Union
 
 
-LOG_DIR = "/shared/logs"
-os.makedirs(LOG_DIR, exist_ok=True)
-
-def get_logger(level: Union[int, str] = logging.INFO):
+class JSONFormatter(logging.Formatter):
     """
-    Returns a logger that writes to <LEVEL>.log (INFO.log,
-    WARNING.log, ERROR.log).
-    with rotating file handler
+    JSON formatter for structured logs.
+    If message is already JSON -> merge it into the base payload.
+    Otherwise -> store the text as "msg".
     """
-    if isinstance(level, str):
-        level = logging.getLevelName(level.upper())
 
-    level_name = logging.getLevelName(level)
-    log_file = os.path.join(LOG_DIR, f"{level_name}.log")
+    def format(self, record: logging.LogRecord) -> str:
+        base = {
+            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+        }
 
-    logger = logging.getLogger(level_name)
-    logger.setLevel(level)
+        msg = record.getMessage()
+        try:
+            payload = json.loads(msg)
+            if not isinstance(payload, dict):
+                payload = {"msg": msg}
+        except json.JSONDecodeError:
+            payload = {"msg": msg}
 
-    if not logger.handlers:
-        handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,  # 10 mb
-            backupCount=5,  # keep last 5 files
-            encoding="utf-8",
-        )
-        handler.setLevel(level)
+        return json.dumps({**base, **payload}, ensure_ascii=False)
 
-        formatter = logging.Formatter(
-            "%(asctime)s | %(levelname)s | %(message)s",
-            datefmt="%H:%M:%S",
-        )
-        handler.setFormatter(formatter)
 
-        logger.addHandler(handler)
-        logger.propagate = False
+def setup_root_logger() -> logging.Logger:
+    """
+    Initialize root application logger (only once).
+    Handlers:
+      - Console: INFO+
+      - app.log: INFO+
+      - error.log: ERROR+
+    """
+    os.makedirs("/shared/logs", exist_ok=True)
+
+    logger = logging.getLogger("app")
+    logger.setLevel(logging.DEBUG)
+
+    # Prevent duplicate handlers on reload
+    if logger.handlers:
+        return logger
+
+    fmt = JSONFormatter()
+
+    # Console handler
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(fmt)
+    logger.addHandler(console)
+
+    # Main rotating file (INFO+)
+    app_file = RotatingFileHandler(
+        "/shared/logs/app.log",
+        maxBytes=10_000_000,  # 10MB
+        backupCount=10,
+        encoding="utf-8",
+    )
+    app_file.setLevel(logging.INFO)
+    app_file.setFormatter(fmt)
+    logger.addHandler(app_file)
+
+    # Error-only rotating file (ERROR+)
+    err_file = RotatingFileHandler(
+        "/shared/logs/error.log",
+        maxBytes=5_000_000,  # 5MB
+        backupCount=10,
+        encoding="utf-8",
+    )
+    err_file.setLevel(logging.ERROR)
+    err_file.setFormatter(fmt)
+    logger.addHandler(err_file)
 
     return logger
 
 
-# define all loggers
-info_logger = get_logger(logging.INFO)
-warn_logger = get_logger(logging.WARNING)
-error_logger = get_logger(logging.ERROR)
+ROOT_LOGGER = setup_root_logger()
+
+
+@dataclass
+class AppLogger:
+    """
+    Helper to log JSON with common fields.
+    """
+    component: str
+    logger: logging.Logger = field(default_factory=lambda: logging.getLogger("app"))
+
+    def _log(self, level: str, message: str, exc_info: bool = False, **fields):
+        trace_id = fields.pop("trace_id", str(uuid.uuid4()))
+
+        payload = {
+            "trace_id": trace_id,
+            "component": self.component,
+            "msg": message,
+            **fields,
+        }
+
+        log_fn = getattr(self.logger, level, self.logger.info)
+        log_fn(json.dumps(payload, ensure_ascii=False), exc_info=exc_info)
+
+    def info(self, message: str, **fields):
+        self._log("info", message, **fields)
+
+    def debug(self, message: str, **fields):
+        self._log("debug", message, **fields)
+
+    def error(self, message: str, **fields):
+        self._log("error", message, **fields)
+
+    def exception(self, message: str, **fields):
+        self._log("error", message, exc_info=True, **fields)
