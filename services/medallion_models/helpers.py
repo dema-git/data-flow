@@ -18,6 +18,18 @@ from services.medallion_models.bronze_model import BronzeWebEvent
 ###################
 
 def bronze_to_silver(event: BronzeWebEvent) -> SilverWebEvent:
+    """
+    Transform a BronzeWebEvent into a SilverWebEvent.
+
+    This step normalizes raw event data:
+    - Parses the URL into structured parts (host, path, section, category, item)
+    - Extracts analytical fields from `extra` (scroll depth, A/B group)
+    - Converts event_time to a proper datetime object
+    - Keeps relevant metadata for further processing
+
+    Silver layer contains cleaned and structured data,
+    but still keeps technical fields (IP, user agent).
+    """
     parsed = urlparse(event.page_url)
     path_parts = [p for p in parsed.path.split("/") if p]
 
@@ -52,13 +64,37 @@ def bronze_to_silver(event: BronzeWebEvent) -> SilverWebEvent:
 # SILVER -> GOLD
 ###################
 
-def silver_to_gold_page_view(e: SilverWebEvent) -> GoldPageView:
-    """
-    Extract page view data from Silver event for analytics layer.
 
-    Selects only fields relevant for page view analysis,
-    dropping technical metadata like IP and user agent.
+def _is_missing(value: Optional[str]) -> bool:
     """
+    Helper function to check if a value should be treated as missing.
+
+    Returns True for:
+    - None
+    - empty strings
+    - common string representations of null values
+      like "nan", "none", "null" (case-insensitive).
+        """
+    if value is None:
+        return True
+    if isinstance(value, str):
+        v = value.strip().lower()
+        return v in {"", "nan", "none", "null"}
+    return False
+
+
+def silver_to_gold_page_view(e: SilverWebEvent) -> Optional[GoldPageView]:
+    """
+    Build a GoldPageView object from a Silver event.
+
+    This function is used for non-product page views.
+    If the URL points to a product page (contains "/product/"),
+    the event is skipped here because it should be handled
+    as a product event in the Gold layer.
+    """
+    if e.page_url and "/product/" in e.page_url:
+        return None
+
     return GoldPageView(
         event_time=e.event_time,
         session_id=e.session_id,
@@ -73,12 +109,16 @@ def silver_to_gold_page_view(e: SilverWebEvent) -> GoldPageView:
 
 def silver_to_gold_product(e: SilverWebEvent) -> Optional[GoldProductEvent]:
     """
-    Extract product interaction data from Silver event.
+    Build a GoldProductEvent object from a Silver event.
 
-    Returns None if event has no associated product.
-    Used for product analytics and revenue tracking.
+    This function creates a product-level analytics record.
+    If product_id is missing (None, empty, "nan", etc.),
+    the event is ignored and None is returned.
+
+    Only valid product interactions (e.g. product view,
+    add to cart, purchase) should reach this layer.
     """
-    if not e.product_id:
+    if _is_missing(e.product_id):
         return None
 
     return GoldProductEvent(
