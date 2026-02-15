@@ -10,9 +10,13 @@
 ###################################################################################
 
 from dataclasses import dataclass
+from typing import Dict, Any
+
 from minio import Minio
+from minio.error import S3Error
 from minio.commonconfig import CopySource
 import os
+from minio.deleteobjects import DeleteObject
 from exceptions_logging.logger import AppLogger
 
 
@@ -150,19 +154,36 @@ class MinioManager:
             raise
 
 
-    def delete_all_objects(self, bucket_name: str):
+    def delete_all_objects(self, bucket_name: str) -> Dict[str, Any]:
         """
-        Delete all objects in a bucket.(if bucket is not empty)
+        Delete all objects from the given bucket.
+        Returns summary with deleted count and error count.
         """
-        objects_to_delete = [obj.object_name for obj in self.client.list_objects(bucket_name,
-                                                                                 recursive=True)]
-        if objects_to_delete:
-            delete_gen = map(lambda name: {"ObjectName": name}, objects_to_delete)
-            self.client.remove_objects(bucket_name, delete_gen)
-            # print(f"Deleted all objects from bucket '{bucket_name}'")
-        else:
-            pass
-            # print(f"Bucket '{bucket_name}' is already empty.")
+
+        objects = self.client.list_objects(bucket_name, recursive=True)
+
+        delete_list = [DeleteObject(obj.object_name) for obj in objects]
+
+        if not delete_list:
+            return {
+                "bucket": bucket_name,
+                "deleted": 0,
+                "errors": 0,
+            }
+
+        errors = 0
+        try:
+            for err in self.client.remove_objects(bucket_name, delete_list):
+                errors += 1
+
+        except S3Error as e:
+            raise
+
+        return {
+            "bucket": bucket_name,
+            "deleted": len(delete_list),
+            "errors": errors,
+        }
 
 
     def move_single_object(self, source_bucket: str, target_bucket: str, object_name: str) -> None:
