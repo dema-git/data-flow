@@ -16,20 +16,24 @@
 ################################################################################
 
 from fastapi import APIRouter, HTTPException
-from minio_utils.files_handler import get_files_data, upload_batch
+from minio_utils.files_handler import get_files_data, upload_batch, get_minio_manager
 from db_utils.helpers import process_records
 from db_utils.database import get_db_session
+from minio.error import S3Error
 from exceptions_logging.custom_exceptions import MinIOException, KafkaException
 from services.faker.config import FakerConfig
 from services.faker.generator import SessionEventFaker
-from services.medallion_pipeline.medallion_service import run_bronze_to_silver, run_silver_to_gold
+from services.medallion_pipeline.medallion_service import (run_bronze_to_silver, run_silver_to_gold, BRONZE_ARCHIVE_BUCKET,
+                                                    SILVER_ARCHIVE_BUCKET)
 from services.medallion_pipeline.gold_loader import process_gold_outbox_tasks
 from services.medallion_pipeline.archive_worker import run_archive_worker
 from services.kafka.producer import KafkaProducerContext
 
 
+
 router = APIRouter(tags=["Integrations"])
 
+minio_manager = get_minio_manager()
 faker = SessionEventFaker(FakerConfig())
 kafka_ctx = KafkaProducerContext()
 
@@ -88,3 +92,44 @@ def run_full_etl():
 def trigger_archive_worker():
     result = run_archive_worker(limit=500)
     return result
+
+
+@router.get("/bronze-archive/cleanup", summary="Clear Bronze archive bucket",
+            description="""
+            Deletes all objects from the Bronze archive bucket in MinIO.
+
+            This endpoint is intended to be triggered only by an Airflow DAG
+            on a strictly defined schedule (fixed interval).
+
+            WARNING: Manual execution may cause unintended data loss
+            by deleting archived objects earlier than expected.
+            """
+            )
+def clear_bronze_archive():
+    try:
+        return minio_manager.delete_all_objects(BRONZE_ARCHIVE_BUCKET)
+    except S3Error as e:
+        raise HTTPException(status_code=500, detail=f"S3Error {e.code}: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/silver-archive/cleanup",
+            summary="Clear Silver archive bucket",
+            description="""
+            Deletes all objects from the Silver archive bucket in MinIO.
+            
+            This endpoint is intended to be triggered only by an Airflow DAG
+            on a strictly defined schedule (fixed interval).
+            
+            WARNING: Manual execution may cause unintended data loss
+            by deleting archived objects earlier than expected.
+            """
+            )
+def clear_silver_archive():
+    try:
+        return minio_manager.delete_all_objects(SILVER_ARCHIVE_BUCKET)
+    except S3Error as e:
+        raise HTTPException(status_code=500, detail=f"S3Error {e.code}: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
