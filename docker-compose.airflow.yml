@@ -87,6 +87,20 @@ services:
     restart: always
 
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow_pgdb:
+        condition: service_healthy
+    command: >
+      bash -c '
+        chmod +x /opt/airflow/scripts/*.sh &&
+        /opt/airflow/scripts/wait-for-airflow.sh dag-processor
+      '
+    restart: always
+
 volumes:
   pgdata_airflow:
   airflow_init_flag:
