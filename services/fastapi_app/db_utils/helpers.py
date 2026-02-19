@@ -9,7 +9,10 @@ from .crud import get_or_create_user, get_or_create_session, create_event
 from datetime import datetime
 import pandas as pd
 import uuid
+from exceptions_logging.logger import AppLogger
 
+
+log = AppLogger(component="db_utils")
 
 def convert_timestamp(ts):
     """
@@ -22,7 +25,8 @@ def convert_timestamp(ts):
     elif isinstance(ts, str):
         return int(datetime.fromisoformat(ts).timestamp())
     else:
-        raise ValueError(f"Unknown timestamp type: {type(ts)}")
+        log.warning("invalid session_id format", session_id=ts)
+        return None
 
 
 def get_valid_session_id(session_id):
@@ -65,11 +69,15 @@ def process_records(db, files_data):
     All valid events are committed to the database in a single transaction.
     Skipped sessions are logged and returned.
     """
+    log.info("process_records started", files_count=len(files_data))
+
     users_cache = {}
     sessions_cache = {}
     skipped_sessions = []
 
     for file in files_data:
+        log.info("processing file", object_name=file.get("object_name"), records=len(file["data"]))
+
         for record in file['data']:
             user_id = record['user_id']
 
@@ -77,7 +85,11 @@ def process_records(db, files_data):
             session_id = get_valid_session_id(record.get('session_id'))
             if session_id is None:
                 skipped_sessions.append(record.get('session_id'))
-                print(f"Skipping invalid session and all its events: {record.get('session_id')}")
+                log.warning(
+                    "skipping invalid session",
+                    session_id=record.get('session_id'),
+                    user_id=user_id
+                )
                 continue
 
             # Extract event info
@@ -95,6 +107,18 @@ def process_records(db, files_data):
     db.commit()
 
     if skipped_sessions:
-        print(f"Skipped {len(skipped_sessions)} invalid sessions: {skipped_sessions}")
+        log.warning(
+            "some sessions skipped",
+            skipped_count=len(skipped_sessions),
+            skipped_sessions=skipped_sessions,
+        )
+    else:
+        log.info("no invalid sessions encountered")
+
+    log.info(
+        "process_records completed",
+        skipped=len(skipped_sessions),
+        total_files=len(files_data)
+    )
 
     return skipped_sessions
