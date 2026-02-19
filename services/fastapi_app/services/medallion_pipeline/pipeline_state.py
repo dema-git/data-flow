@@ -20,14 +20,16 @@
 # the state consistent.
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Optional, Any
 from datetime import datetime
 from typing import Optional, List, Dict
-
+import os
 from sqlalchemy import create_engine, text
 
-DATABASE_URL = "postgresql+psycopg2://admin1:pass12345%40@db:5432/main"
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASS = os.getenv("DB_PASSWORD")
+
+DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
 
 engine = create_engine(DATABASE_URL)
 

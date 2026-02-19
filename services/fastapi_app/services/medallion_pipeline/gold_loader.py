@@ -16,7 +16,7 @@
 import math
 from dataclasses import asdict
 from typing import List, Dict
-
+import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from minio_utils.files_handler import get_files_data
@@ -29,7 +29,10 @@ from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
 
 log = AppLogger(component="gold_loader")
 
-DATABASE_URL = "postgresql+psycopg2://admin1:pass12345%40@db:5432/main"
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASS = os.getenv("DB_PASSWORD")
+
+DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
 
 engine = create_engine(DATABASE_URL)
 

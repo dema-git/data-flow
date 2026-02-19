@@ -29,8 +29,8 @@ class MinioConfig:
     All required parameters to initialize a MinIO client instance.
     """
     host: str = "minio:9010"
-    access_key: str = "admin"
-    secret_key: str = "pass12345@"
+    access_key: str = os.getenv("MINIO_USER", "")
+    secret_key: str = os.getenv("MINIO_PASSWORD", "")
     secure: bool = False
 
 
