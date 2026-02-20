@@ -11,4 +11,4 @@ COPY scripts /scripts
 
 RUN chmod +x /scripts/*.sh
 
-ENTRYPOINT ["/scripts/wait-for-it.sh", "kafka:9092", "--", "/scripts/create-topic.sh"]
+ENTRYPOINT ["/scripts/create-topic.sh"]
