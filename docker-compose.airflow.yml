@@ -8,9 +8,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_pgdb:5432/airflow_db
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__API__BASE_URL: "http://localhost:8080"
-    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
-    AIRFLOW__WEBSERVER__BASE_URL: "http://localhost:8080"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-api-server:8080/execution/"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/plugins:/opt/airflow/plugins
@@ -18,7 +16,8 @@ x-airflow-common: &airflow-common
     - ./scripts:/opt/airflow/scripts
     - airflow_init_flag:/opt/airflow
   networks:
-    - postgresql_private_net
+    - app_network
+
 
 services:
   airflow_pgdb:
@@ -31,10 +30,10 @@ services:
       - ./init-db:/docker-entrypoint-initdb.d
       - pgdata_airflow:/var/lib/postgresql/data
     networks:
-      - postgresql_private_net
+      - app_network
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
+      test: [ "CMD-SHELL", "pg_isready -U airflow -d airflow_db" ]
       interval: 5s
       retries: 5
 
@@ -66,12 +65,14 @@ services:
         condition: service_completed_successfully
       airflow_pgdb:
         condition: service_healthy
-    command: >
-      bash -c '
-        chmod +x /opt/airflow/scripts/*.sh &&
-        /opt/airflow/scripts/wait-for-airflow.sh scheduler
-      '
+    command: scheduler
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname airflow-scheduler" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 
   airflow-webserver:
     <<: *airflow-common
@@ -80,14 +81,33 @@ services:
         condition: service_completed_successfully
       airflow_pgdb:
         condition: service_healthy
-    command: >
-      bash -c '
-        chmod +x /opt/airflow/scripts/*.sh &&
-        /opt/airflow/scripts/wait-for-airflow.sh api-server
-      '
+    command: api-server
     ports:
       - "8080:8080"
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/api/v2/monitor/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  airflow-api-server:
+    <<: *airflow-common
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow_pgdb:
+        condition: service_healthy
+    command: api-server
+    ports:
+      - "8081:8080"
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/api/v2/monitor/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
   airflow-dag-processor:
@@ -97,19 +117,16 @@ services:
         condition: service_completed_successfully
       airflow_pgdb:
         condition: service_healthy
-    command: >
-      bash -c '
-        chmod +x /opt/airflow/scripts/*.sh &&
-        /opt/airflow/scripts/wait-for-airflow.sh dag-processor
-      '
+    command: dag-processor
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname $(hostname)" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
 
 volumes:
   pgdata_airflow:
   airflow_init_flag:
 
-networks:
-  postgresql_private_net:
-    external: true
-    name: dataflow_network
