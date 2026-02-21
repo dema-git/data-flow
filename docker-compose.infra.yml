@@ -78,7 +78,7 @@ services:
     container_name: kafdrop
     restart: always
     ports:
-      - "9000:9000"
+      - "${KAFDROP_PORT}:9000"
     environment:
       KAFKA_BROKERCONNECT: "kafka:9092"
     depends_on:
