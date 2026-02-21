@@ -25,14 +25,16 @@ from services.medallion_pipeline.pipeline_state import (fetch_pending_tasks,
 from services.medallion_pipeline.outbox import enqueue_archive_task
 from exceptions_logging.logger import AppLogger
 from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
+from urllib.parse import quote_plus
 
 
 log = AppLogger(component="gold_loader")
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = os.getenv("DB_PASSWORD")
+POSTGRES_PASSWORD = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
-DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
+
+DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db:5432/main"
 
 engine = create_engine(DATABASE_URL)
 

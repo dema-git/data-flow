@@ -22,11 +22,12 @@ from datetime import datetime
 from typing import Optional
 import os
 from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = os.getenv("DB_PASSWORD")
+POSTGRES_PASSWORD = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
-DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
+DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db:5432/main"
 
 engine = create_engine(DATABASE_URL)
 

@@ -8,12 +8,13 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from urllib.parse import quote_plus
 import os
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = os.getenv("DB_PASSWORD")
+POSTGRES_PASSWORD = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_USER}@db:5432/main"
+DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db:5432/main"
 
 def get_engine(echo: bool = True):
     """Create and return a SQLAlchemy engine."""

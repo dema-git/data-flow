@@ -18,9 +18,14 @@ from minio.commonconfig import CopySource
 import os
 from minio.deleteobjects import DeleteObject
 from exceptions_logging.logger import AppLogger
+from urllib.parse import quote_plus
 
 
 log = AppLogger(component="minio_manager")
+
+ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
+SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+
 
 @dataclass
 class MinioConfig:
@@ -29,8 +34,8 @@ class MinioConfig:
     All required parameters to initialize a MinIO client instance.
     """
     host: str = "minio:9010"
-    access_key: str = os.getenv("MINIO_USER", "")
-    secret_key: str = os.getenv("MINIO_PASSWORD", "")
+    access_key: str = ACCESS_KEY
+    secret_key: str = SECRET_KEY
     secure: bool = False
 
 
