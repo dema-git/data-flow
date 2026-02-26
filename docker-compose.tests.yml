@@ -1,0 +1,8 @@
+services:
+  api_tests:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    container_name: api_tests
+    env_file:
+      - .env
