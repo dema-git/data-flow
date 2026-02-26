@@ -81,6 +81,7 @@ class DummyMinioClient:
 
     def remove_objects(self, bucket_name: str, delete_list):
         self.remove_objects_calls.append((bucket_name, list(delete_list)))
+        return iter([])
 
     def remove_object(self, bucket_name: str, object_name: str):
         self.remove_objects_calls.append((bucket_name, object_name))
