@@ -122,6 +122,9 @@ class AppLogger:
     def debug(self, message: str, **fields):
         self._log("debug", message, **fields)
 
+    def warning(self, message: str, **fields):
+        self._log("warning", message, **fields)
+
     def error(self, message: str, **fields):
         self._log("error", message, **fields)
 
