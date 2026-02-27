@@ -125,7 +125,7 @@ def run_bronze_to_silver() -> Dict[str, int]:
             archived_files=len(bronze_files),
         )
     except Exception as e:
-        log.exception(f"bronze_to_silver side effects failed (state/outbox): {e.arsg}")
+        log.exception(f"bronze_to_silver side effects failed (state/outbox): {e.args}")
 
     return {
         "bronze_count": len(bronze_events),
@@ -252,4 +252,52 @@ def run_silver_to_gold() -> Dict[str, int]:
         "silver_count": len(silver_events),
         "gold_page_views_count": len(page_views),
         "gold_product_events_count": len(product_events),
+    }
+
+
+def get_medallion_stats() -> Dict[str, int]:
+    """
+    Helper to collect basic Medallion metrics from MinIO.
+
+    It does NOT change any state and does NOT move files.
+    It only reads current parquet data from Bronze/Silver/Gold buckets
+    and counts rows & files.
+
+    This is safe to call from the FastAPI dashboard.
+    """
+    # Bronze
+    bronze_files = get_files_data(BRONZE_BUCKET)
+    bronze_files_count = len(bronze_files)
+    bronze_rows_count = sum(len(f["data"]) for f in bronze_files)
+
+    # Silver
+    silver_files = get_files_data(SILVER_BUCKET)
+    silver_files_count = len(silver_files)
+    silver_rows_count = sum(len(f["data"]) for f in silver_files)
+
+    # Gold: page views
+    gold_pv_files = get_files_data(GOLD_PAGE_VIEWS_BUCKET)
+    gold_pv_files_count = len(gold_pv_files)
+    gold_pv_rows_count = sum(len(f["data"]) for f in gold_pv_files)
+
+    # Gold: product events
+    gold_pe_files = get_files_data(GOLD_PRODUCT_VIEWS_BUCKET)
+    gold_pe_files_count = len(gold_pe_files)
+    gold_pe_rows_count = sum(len(f["data"]) for f in gold_pe_files)
+
+    # Gold-rows count
+    gold_total_rows = gold_pv_rows_count + gold_pe_rows_count
+    gold_total_files = gold_pv_files_count + gold_pe_files_count
+
+    return {
+        "bronze_files": bronze_files_count,
+        "bronze_rows": bronze_rows_count,
+        "silver_files": silver_files_count,
+        "silver_rows": silver_rows_count,
+        "gold_files": gold_total_files,
+        "gold_rows": gold_total_rows,
+        "gold_page_view_files": gold_pv_files_count,
+        "gold_page_view_rows": gold_pv_rows_count,
+        "gold_product_event_files": gold_pe_files_count,
+        "gold_product_event_rows": gold_pe_rows_count,
     }
