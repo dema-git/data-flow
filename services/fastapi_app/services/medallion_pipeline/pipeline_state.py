@@ -25,9 +25,10 @@ from datetime import datetime
 from typing import Optional, List, Dict
 import os
 from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = os.getenv("DB_PASSWORD")
+POSTGRES_PASS = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
 DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
 
