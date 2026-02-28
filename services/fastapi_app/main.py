@@ -8,7 +8,7 @@
 # - Starts a Kafka producer to send events
 # - Starts a Kafka consumer to read events
 # - Runs a background task that generates fake session data every 10 seconds
-# - Includes all API route modules (integrations, analytics, faker)
+# - Includes all API route modules (integrations, analytics, faker, dashboard)
 #
 # The background task automatically creates test sessions and sends them to Kafka
 # while the application is running.
@@ -17,7 +17,12 @@
 import asyncio
 import logging
 from fastapi import FastAPI
-from api import integrations_routes, analytics_routes, faker_generator_route
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi import Depends
+from fastapi.templating import Jinja2Templates
+from api import (integrations_routes, analytics_routes, faker_generator_route,
+                 dashboard_routes)
 from services.faker.generator import SessionEventFaker
 from services.faker.config import FakerConfig
 from services.kafka.consumer import start_consumer_loop
@@ -46,12 +51,8 @@ app = FastAPI(
 )
 
 
-@app.get("/", tags=["Home/Dashboard"])
-def homepage():
-    return {"page": "Homepage"}
-
-
-faker = SessionEventFaker(FakerConfig())
+faker_config = FakerConfig()
+faker = SessionEventFaker(faker_config)
 kafka_ctx = KafkaProducerContext()
 
 _background_task: asyncio.Task | None = None
@@ -131,4 +132,5 @@ async def on_shutdown():
 app.include_router(integrations_routes.router)
 app.include_router(analytics_routes.router)
 app.include_router(faker_generator_route.router)
+app.include_router(dashboard_routes.router)
 
