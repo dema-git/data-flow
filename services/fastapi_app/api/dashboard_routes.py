@@ -1,3 +1,12 @@
+###################################################################
+# api/dashboard_routes.py
+#
+# This module renders the main HTML dashboard, exposes live pipeline metrics for HTMX updates,
+# and provides access to high-level metadata about the Kafka → MinIO → PostgreSQL data flow.
+# It loads Jinja2 templates, retrieves Medallion layer statistics, and integrates generator
+# configuration from FakerConfig.
+###################################################################
+
 from fastapi import APIRouter, HTTPException
 from models import User, Session as SessionModel, Event, engine
 from services.session_services import ( get_top_landing_pages_service, get_top_products_by_revenue_service,
