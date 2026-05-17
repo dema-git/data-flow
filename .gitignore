@@ -1,6 +1,7 @@
 minio-data/
 pgdata/
 shared_logs/
+.env
 
 .idea
 .ipynb_checkpoints
@@ -34,4 +35,3 @@ archive.zip
 .DS_Store
 
 .codspeed
-
