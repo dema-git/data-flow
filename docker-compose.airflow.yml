@@ -68,7 +68,7 @@ services:
     command: scheduler
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname airflow-scheduler" ]
+      test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -129,4 +129,3 @@ services:
 volumes:
   pgdata_airflow:
   airflow_init_flag:
-
