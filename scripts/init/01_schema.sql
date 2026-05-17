@@ -190,6 +190,34 @@ CREATE INDEX IF NOT EXISTS idx_outbox_tasks_dataset_layer_partition
     ON pipeline.outbox_tasks(dataset, layer, partition_key);
 
 
+------------- PIPELINE: ETL RUNS
+
+CREATE TABLE IF NOT EXISTS pipeline.etl_runs (
+    id BIGSERIAL PRIMARY KEY,
+
+    status                    TEXT NOT NULL,
+
+    bronze_count              INT  NOT NULL DEFAULT 0,
+    silver_count              INT  NOT NULL DEFAULT 0,
+    gold_page_views_count     INT  NOT NULL DEFAULT 0,
+    gold_product_events_count INT  NOT NULL DEFAULT 0,
+    loaded_page_views_count   INT  NOT NULL DEFAULT 0,
+    loaded_product_events_count INT NOT NULL DEFAULT 0,
+
+    error_message             TEXT,
+
+    started_at                TIMESTAMP NOT NULL DEFAULT NOW(),
+    finished_at               TIMESTAMP,
+    duration_seconds          NUMERIC(10,3)
+);
+
+CREATE INDEX IF NOT EXISTS idx_etl_runs_started_at
+    ON pipeline.etl_runs(started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_etl_runs_status
+    ON pipeline.etl_runs(status);
+
+
 ------------- GRANTS FOR admin1
 
 GRANT USAGE ON SCHEMA mart TO admin1;

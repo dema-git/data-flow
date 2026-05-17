@@ -27,6 +27,11 @@ from services.medallion_pipeline.medallion_service import (run_bronze_to_silver,
                                                     SILVER_ARCHIVE_BUCKET)
 from services.medallion_pipeline.gold_loader import process_gold_outbox_tasks
 from services.medallion_pipeline.archive_worker import run_archive_worker
+from services.medallion_pipeline.pipeline_state import (
+    fail_etl_run,
+    finish_etl_run,
+    start_etl_run,
+)
 from services.kafka.producer import KafkaProducerContext
 
 
@@ -55,20 +60,27 @@ kafka_ctx = KafkaProducerContext()
     """
 )
 def run_full_etl():
+    run_id = start_etl_run()
     try:
         bronze_to_silver = run_bronze_to_silver()
         silver_to_gold = run_silver_to_gold()
         gold = process_gold_outbox_tasks()
-        return {
+        result = {
+            "run_id": run_id,
             "bronze_to_silver": bronze_to_silver,
             "silver_to_gold": silver_to_gold,
             "gold_loader": gold,
         }
+        finish_etl_run(run_id, result)
+        return result
     except MinIOException as e:
+        fail_etl_run(run_id, e.message)
         raise HTTPException(status_code=500, detail=e.message)
     except KafkaException as e:
+        fail_etl_run(run_id, e.message)
         raise HTTPException(status_code=500, detail=e.message)
     except Exception as e:
+        fail_etl_run(run_id, str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

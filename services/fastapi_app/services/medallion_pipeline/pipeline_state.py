@@ -29,6 +29,49 @@ from db_utils.database import build_database_url
 
 engine = create_engine(build_database_url("postgresql+psycopg2"))
 
+
+def ensure_etl_runs_table() -> None:
+    """
+    Create the ETL run history table when an existing local DB is reused.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS pipeline.etl_runs (
+                    id BIGSERIAL PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    bronze_count INT NOT NULL DEFAULT 0,
+                    silver_count INT NOT NULL DEFAULT 0,
+                    gold_page_views_count INT NOT NULL DEFAULT 0,
+                    gold_product_events_count INT NOT NULL DEFAULT 0,
+                    loaded_page_views_count INT NOT NULL DEFAULT 0,
+                    loaded_product_events_count INT NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    finished_at TIMESTAMP,
+                    duration_seconds NUMERIC(10,3)
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS idx_etl_runs_started_at
+                    ON pipeline.etl_runs(started_at DESC)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS idx_etl_runs_status
+                    ON pipeline.etl_runs(status)
+                """
+            )
+        )
+
 @dataclass
 class OutboxTask:
     """
@@ -142,6 +185,163 @@ def fetch_pending_tasks(*, event_type: Optional[str] = None,
         rows = conn.execute(query, params).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def fetch_latest_outbox_tasks(limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Fetch the latest outbox records for the operational dashboard.
+
+    These rows represent recent ETL handoffs between Medallion layers.
+    """
+    query = text(
+        """
+        SELECT
+            id, event_type, dataset, layer, partition_key,
+            status, attempts, last_error, created_at, updated_at
+        FROM pipeline.outbox_tasks
+        ORDER BY updated_at DESC, id DESC
+        LIMIT :limit
+        """
+    )
+
+    with engine.begin() as conn:
+        rows = conn.execute(query, {"limit": limit}).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def start_etl_run() -> int:
+    """
+    Create a RUNNING ETL run record and return its ID.
+    """
+    ensure_etl_runs_table()
+
+    with engine.begin() as conn:
+        run_id = conn.execute(
+            text(
+                """
+                INSERT INTO pipeline.etl_runs (status)
+                VALUES ('RUNNING')
+                RETURNING id
+                """
+            )
+        ).scalar_one()
+
+    return run_id
+
+
+def finish_etl_run(run_id: int, result: Dict[str, Any]) -> None:
+    """
+    Mark an ETL run as successful and store key row counts.
+    """
+    bronze_to_silver = result.get("bronze_to_silver", {})
+    silver_to_gold = result.get("silver_to_gold", {})
+    gold_loader = result.get("gold_loader", {})
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE pipeline.etl_runs
+                SET status = 'SUCCESS',
+                    bronze_count = :bronze_count,
+                    silver_count = :silver_count,
+                    gold_page_views_count = :gold_page_views_count,
+                    gold_product_events_count = :gold_product_events_count,
+                    loaded_page_views_count = :loaded_page_views_count,
+                    loaded_product_events_count = :loaded_product_events_count,
+                    finished_at = NOW(),
+                    duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))
+                WHERE id = :run_id
+                """
+            ),
+            {
+                "run_id": run_id,
+                "bronze_count": bronze_to_silver.get("bronze_count", 0),
+                "silver_count": silver_to_gold.get("silver_count", 0),
+                "gold_page_views_count": silver_to_gold.get("gold_page_views_count", 0),
+                "gold_product_events_count": silver_to_gold.get("gold_product_events_count", 0),
+                "loaded_page_views_count": gold_loader.get("inserted_page_views", 0),
+                "loaded_product_events_count": gold_loader.get("inserted_product_events", 0),
+            },
+        )
+
+
+def fail_etl_run(run_id: int, error_message: str) -> None:
+    """
+    Mark an ETL run as failed and store a short error message.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE pipeline.etl_runs
+                SET status = 'FAILED',
+                    error_message = :error_message,
+                    finished_at = NOW(),
+                    duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))
+                WHERE id = :run_id
+                """
+            ),
+            {
+                "run_id": run_id,
+                "error_message": error_message[:500],
+            },
+        )
+
+
+def fetch_latest_etl_runs(limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Fetch latest full ETL runs for the operational dashboard.
+    """
+    ensure_etl_runs_table()
+
+    query = text(
+        """
+        SELECT
+            id, status, bronze_count, silver_count,
+            gold_page_views_count, gold_product_events_count,
+            loaded_page_views_count, loaded_product_events_count,
+            error_message, started_at, finished_at, duration_seconds
+        FROM pipeline.etl_runs
+        ORDER BY started_at DESC, id DESC
+        LIMIT :limit
+        """
+    )
+
+    with engine.begin() as conn:
+        rows = conn.execute(query, {"limit": limit}).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def fetch_outbox_status_counts() -> Dict[str, int]:
+    """
+    Count outbox tasks by status for the operational dashboard.
+    """
+    query = text(
+        """
+        SELECT status, COUNT(*) AS tasks_count
+        FROM pipeline.outbox_tasks
+        GROUP BY status
+        """
+    )
+
+    counts = {
+        "PENDING": 0,
+        "IN_PROGRESS": 0,
+        "DONE": 0,
+        "FAILED": 0,
+    }
+
+    with engine.begin() as conn:
+        rows = conn.execute(query).mappings().all()
+
+    for row in rows:
+        counts[row["status"]] = row["tasks_count"]
+
+    counts["TOTAL"] = sum(counts.values())
+    return counts
 
 
 def mark_task_in_progress(task_id: int) -> bool:
