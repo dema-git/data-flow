@@ -16,27 +16,21 @@
 import math
 from dataclasses import asdict
 from typing import List, Dict
-import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from db_utils.database import build_database_url
 from minio_utils.files_handler import get_files_data
 from services.medallion_pipeline.pipeline_state import (fetch_pending_tasks,
                                                         mark_task_done)
 from services.medallion_pipeline.outbox import enqueue_archive_task
 from exceptions_logging.logger import AppLogger
 from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
-from urllib.parse import quote_plus
 
 
 log = AppLogger(component="gold_loader")
 
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
-
-DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db:5432/main"
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(build_database_url("postgresql+psycopg2"))
 
 BATCH_SIZE = 10_000
 

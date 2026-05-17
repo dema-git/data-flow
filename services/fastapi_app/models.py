@@ -11,10 +11,12 @@
 
 #################################################################################
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, ForeignKey, BigInteger, create_engine
 import uuid
+
+from db_utils.database import get_engine
+from sqlalchemy import Integer, String, ForeignKey, BigInteger
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
@@ -44,9 +46,13 @@ class Event(Base):
     session: Mapped["Session"] = relationship(back_populates="events")
 
 
-engine = create_engine(
-    "postgresql://admin1:pass12345%40@db:5432/main",
-    echo=True
-)
+engine = get_engine()
 
-Base.metadata.create_all(engine)
+
+def initialize_database() -> None:
+    """Create application tables used by the local demo stack."""
+    Base.metadata.create_all(engine)
+
+
+if __name__ == "__main__":
+    initialize_database()

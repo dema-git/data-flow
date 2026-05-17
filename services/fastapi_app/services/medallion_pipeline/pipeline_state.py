@@ -20,19 +20,14 @@
 # the state consistent.
 
 from dataclasses import dataclass
-from typing import Optional, Any
 from datetime import datetime
-from typing import Optional, List, Dict
-import os
+from typing import Any, Dict, List, Optional
+
 from sqlalchemy import create_engine, text
-from urllib.parse import quote_plus
 
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = quote_plus(os.getenv("POSTGRES_PASSWORD"))
+from db_utils.database import build_database_url
 
-DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASS}@db:5432/main"
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(build_database_url("postgresql+psycopg2"))
 
 @dataclass
 class OutboxTask:

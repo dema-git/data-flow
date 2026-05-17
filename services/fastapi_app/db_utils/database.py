@@ -6,17 +6,39 @@
 # centralized and reusable access to the PostgreSQL database.
 ###############################################################################
 
+import os
+from urllib.parse import quote_plus
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from urllib.parse import quote_plus
-import os
 
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = quote_plus(os.getenv("POSTGRES_PASSWORD"))
 
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db:5432/main"
+def build_database_url(driver: str = "postgresql") -> str:
+    """
+    Build a SQLAlchemy database URL from environment variables.
 
-def get_engine(echo: bool = True):
+    DATABASE_URL can be used to override the individual POSTGRES_* settings.
+    """
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return database_url
+
+    postgres_user = os.getenv("POSTGRES_USER", "admin1")
+    postgres_password = os.getenv("POSTGRES_PASSWORD", "change-me")
+    postgres_host = os.getenv("POSTGRES_HOST", "db")
+    postgres_port = os.getenv("POSTGRES_PORT", "5432")
+    postgres_db = os.getenv("POSTGRES_DB", "main")
+
+    return (
+        f"{driver}://{quote_plus(postgres_user)}:"
+        f"{quote_plus(postgres_password)}@{postgres_host}:{postgres_port}/{postgres_db}"
+    )
+
+
+DATABASE_URL = build_database_url()
+
+
+def get_engine(echo: bool = False):
     """Create and return a SQLAlchemy engine."""
     return create_engine(
         DATABASE_URL,
