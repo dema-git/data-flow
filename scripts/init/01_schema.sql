@@ -175,7 +175,10 @@ CREATE TABLE IF NOT EXISTS pipeline.outbox_tasks (
     last_error    TEXT,
 
     created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_outbox_tasks_event_dataset_layer_partition
+        UNIQUE (event_type, dataset, layer, partition_key)
 );
 
 

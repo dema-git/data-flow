@@ -22,7 +22,10 @@ from db_utils.database import build_database_url
 from minio_utils.files_handler import get_files_data
 from services.medallion_pipeline.pipeline_state import (fetch_pending_tasks,
                                                         mark_task_done)
-from services.medallion_pipeline.outbox import enqueue_archive_task
+from services.medallion_pipeline.outbox import (
+    enqueue_archive_task,
+    get_existing_archive_partition_keys,
+)
 from exceptions_logging.logger import AppLogger
 from services.medallion_models.gold_models import GoldPageView, GoldProductEvent
 
@@ -150,6 +153,27 @@ def insert_gold_product_events(events: List[GoldProductEvent]) -> int:
 GOLD_PAGE_VIEWS_BUCKET = "events-gold-page-views"
 GOLD_PRODUCT_VIEWS_BUCKET = "events-gold-product-events"
 
+
+def filter_unprocessed_gold_files(files: List[Dict], layer: str) -> List[Dict]:
+    """
+    Keep only Gold files that do not already have archive tasks.
+
+    This makes DB loading idempotent when the loader is called repeatedly before
+    the archive worker moves processed files out of the active Gold buckets.
+    """
+    object_names = [f.get("object_name") for f in files if f.get("object_name")]
+    processed_keys = get_existing_archive_partition_keys(
+        dataset="web_events",
+        layer=layer,
+        partition_keys=object_names,
+    )
+
+    return [
+        f for f in files
+        if f.get("object_name") not in processed_keys
+    ]
+
+
 def clean_nan(d: dict) -> dict:
     cleaned = {}
     for k, v in d.items():
@@ -177,19 +201,27 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
         # Download all Parquet files from GOLD buckets in MinIO
         page_view_files = get_files_data(GOLD_PAGE_VIEWS_BUCKET)
         product_event_files = get_files_data(GOLD_PRODUCT_VIEWS_BUCKET)
+        page_view_files_to_process = filter_unprocessed_gold_files(
+            page_view_files,
+            layer="gold_page_views",
+        )
+        product_event_files_to_process = filter_unprocessed_gold_files(
+            product_event_files,
+            layer="gold_product_events",
+        )
 
         # These lists will contain validated Gold model instances
         page_views: List[GoldPageView] = []
         product_events: List[GoldProductEvent] = []
 
         #Parse page view files and convert rows into GoldPageView objects
-        for f in page_view_files:
+        for f in page_view_files_to_process:
             for row in f["data"]:
                 row = clean_nan(row)
                 page_views.append(GoldPageView(**row))
 
         #  Parse product event files and convert rows into GoldProductEvent objects
-        for f in product_event_files:
+        for f in product_event_files_to_process:
             for row in f["data"]:
                 product_events.append(GoldProductEvent(**row))
 
@@ -203,8 +235,14 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
             return {
                 "inserted_page_views": 0,
                 "inserted_product_events": 0,
-                "page_view_files": len(page_view_files),
-                "product_event_files": len(product_event_files),
+                "page_view_files": len(page_view_files_to_process),
+                "product_event_files": len(product_event_files_to_process),
+                "skipped_page_view_files": (
+                    len(page_view_files) - len(page_view_files_to_process)
+                ),
+                "skipped_product_event_files": (
+                    len(product_event_files) - len(product_event_files_to_process)
+                ),
             }
 
         # Insert parsed rows into the GOLD database tables (batched)
@@ -212,7 +250,7 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
         inserted_pe = insert_gold_product_events(product_events) if product_events else 0
 
         # After successful DB insert, enqueue archive tasks
-        for f in page_view_files:
+        for f in page_view_files_to_process:
             enqueue_archive_task(
                 dataset="web_events",
                 layer="gold_page_views",
@@ -220,7 +258,7 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
                 event_type="ARCHIVE",
             )
 
-        for f in product_event_files:
+        for f in product_event_files_to_process:
             enqueue_archive_task(
                 dataset="web_events",
                 layer="gold_product_events",
@@ -229,8 +267,8 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
             )
         log.info(
             "process_gold_outbox_tasks done",
-            page_view_files=len(page_view_files),
-            product_event_files=len(product_event_files),
+            page_view_files=len(page_view_files_to_process),
+            product_event_files=len(product_event_files_to_process),
         )
 
     except Exception as e:
@@ -248,6 +286,12 @@ def process_gold_outbox_tasks() -> Dict[str, int]:
     return {
         "inserted_page_views": inserted_pv,
         "inserted_product_events": inserted_pe,
-        "page_view_files": len(page_view_files),
-        "product_event_files": len(product_event_files),
+        "page_view_files": len(page_view_files_to_process),
+        "product_event_files": len(product_event_files_to_process),
+        "skipped_page_view_files": (
+            len(page_view_files) - len(page_view_files_to_process)
+        ),
+        "skipped_product_event_files": (
+            len(product_event_files) - len(product_event_files_to_process)
+        ),
     }

@@ -14,7 +14,10 @@ from dataclasses import asdict
 from typing import List, Dict
 from minio_utils.files_handler import get_files_data, upload_batch
 
-from services.medallion_pipeline.outbox import enqueue_archive_task
+from services.medallion_pipeline.outbox import (
+    enqueue_archive_task,
+    get_existing_archive_partition_keys,
+)
 from services.medallion_pipeline.pipeline_state import update_processing_state
 from services.medallion_models.bronze_model import BronzeWebEvent
 from services.medallion_models.gold_models import GoldProductEvent, GoldPageView
@@ -38,6 +41,27 @@ GOLD_PRODUCT_VIEWS_BUCKET = "events-gold-product-events"
 GOLD_PRODUCT_VIEWS_ARCHIVE_BUCKET = "events-gold-product-events-archive"
 
 
+def filter_unprocessed_files(files: List[Dict], layer: str) -> List[Dict]:
+    """
+    Keep only files that do not already have an archive task.
+
+    Archive tasks are created after a file is successfully processed into the
+    next layer. If a second ETL run starts before the archive worker moves the
+    object, this check prevents re-processing the same file.
+    """
+    object_names = [f.get("object_name") for f in files if f.get("object_name")]
+    processed_keys = get_existing_archive_partition_keys(
+        dataset="web_events",
+        layer=layer,
+        partition_keys=object_names,
+    )
+
+    return [
+        f for f in files
+        if f.get("object_name") not in processed_keys
+    ]
+
+
 def run_bronze_to_silver() -> Dict[str, int]:
     """
     Read all Bronze events from MinIO, transform them to Silver,
@@ -51,14 +75,22 @@ def run_bronze_to_silver() -> Dict[str, int]:
 
     try:
         bronze_files = get_files_data(BRONZE_BUCKET)
+        skipped_files = 0
+        bronze_files_to_process = filter_unprocessed_files(
+            bronze_files,
+            layer="bronze",
+        )
+        skipped_files = len(bronze_files) - len(bronze_files_to_process)
 
         log.info(
             "bronze files loaded",
             files_count=len(bronze_files),
+            processable_files=len(bronze_files_to_process),
+            skipped_files=skipped_files,
         )
 
         bronze_events: List[BronzeWebEvent] = []
-        for f in bronze_files:
+        for f in bronze_files_to_process:
             for row in f["data"]:
                 # Each row is a flat Bronze event dict → map it to dataclass.
                 bronze_events.append(BronzeWebEvent(**row))
@@ -72,6 +104,7 @@ def run_bronze_to_silver() -> Dict[str, int]:
             return {
                 "bronze_count": 0,
                 "silver_count": 0,
+                "skipped_files": skipped_files,
             }
 
         # Transform Bronze → Silver via helper func.
@@ -111,7 +144,7 @@ def run_bronze_to_silver() -> Dict[str, int]:
             last_processed_ts=max_ts,
         )
 
-        for f in bronze_files:
+        for f in bronze_files_to_process:
             bronze_object_name = f.get("object_name")
             enqueue_archive_task(
                 dataset="web_events",
@@ -122,7 +155,7 @@ def run_bronze_to_silver() -> Dict[str, int]:
 
         log.info(
             "bronze_to_silver side effects done",
-            archived_files=len(bronze_files),
+            archived_files=len(bronze_files_to_process),
         )
     except Exception as e:
         log.exception(f"bronze_to_silver side effects failed (state/outbox): {e.args}")
@@ -130,6 +163,7 @@ def run_bronze_to_silver() -> Dict[str, int]:
     return {
         "bronze_count": len(bronze_events),
         "silver_count": len(silver_events),
+        "skipped_files": skipped_files,
     }
 
 
@@ -148,14 +182,22 @@ def run_silver_to_gold() -> Dict[str, int]:
 
     try:
         silver_files = get_files_data(SILVER_BUCKET)
+        skipped_files = 0
+        silver_files_to_process = filter_unprocessed_files(
+            silver_files,
+            layer="silver",
+        )
+        skipped_files = len(silver_files) - len(silver_files_to_process)
 
         log.info(
             "silver files loaded",
             files_count=len(silver_files),
+            processable_files=len(silver_files_to_process),
+            skipped_files=skipped_files,
         )
 
         silver_events: List[SilverWebEvent] = []
-        for f in silver_files:
+        for f in silver_files_to_process:
             for row in f["data"]:
                 # Each row is a flat Silver event dict → map it to dataclass.
                 silver_events.append(SilverWebEvent(**row))
@@ -170,6 +212,7 @@ def run_silver_to_gold() -> Dict[str, int]:
                 "silver_count": 0,
                 "gold_page_views_count": 0,
                 "gold_product_events_count": 0,
+                "skipped_files": skipped_files,
             }
 
         # Transform Silver → Gold models.
@@ -230,7 +273,7 @@ def run_silver_to_gold() -> Dict[str, int]:
             last_processed_ts=max_ts,
         )
 
-        for f in silver_files:
+        for f in silver_files_to_process:
             silver_object_name = f.get("object_name")
             enqueue_archive_task(
                 dataset="web_events",
@@ -241,7 +284,7 @@ def run_silver_to_gold() -> Dict[str, int]:
 
         log.info(
             "silver_to_gold side effects done",
-            archived_files=len(silver_files),
+            archived_files=len(silver_files_to_process),
         )
 
     except Exception as e:
@@ -252,6 +295,7 @@ def run_silver_to_gold() -> Dict[str, int]:
         "silver_count": len(silver_events),
         "gold_page_views_count": len(page_views),
         "gold_product_events_count": len(product_events),
+        "skipped_files": skipped_files,
     }
 
 
