@@ -143,6 +143,12 @@ curl -H "X-API-Token: change-me" http://localhost:8000/etl/run-full
 
 Without the header, or with a wrong token, the API returns `401`.
 
+Airflow DAGs use the same protected endpoints, but they do not hardcode the
+header in every DAG. The shared Airflow HTTP client reads
+`OPERATIONAL_API_TOKEN` from the Airflow container environment and injects
+`X-API-Token` automatically. Manual calls through Swagger, browser, or `curl`
+must provide the header explicitly.
+
 This is not meant to be a full auth system. It is a small guard for local operational endpoints that should not be accidentally triggered from the browser or by unauthenticated clients.
 
 ## Local Setup
