@@ -10,6 +10,7 @@ import requests
 
 
 API_BASE_URL = os.getenv("ETL_API_BASE_URL", "http://api_app:8000")
+OPERATIONAL_API_TOKEN = os.getenv("OPERATIONAL_API_TOKEN", "change-me")
 
 
 def call_api(path: str, timeout_s: int = 600) -> dict:
@@ -21,6 +22,7 @@ def call_api(path: str, timeout_s: int = 600) -> dict:
     - ValueError if response is not valid JSON
     """
     url = f"{API_BASE_URL}{path}"
-    response = requests.get(url, timeout=timeout_s)
+    headers = {"X-API-Token": OPERATIONAL_API_TOKEN}
+    response = requests.get(url, headers=headers, timeout=timeout_s)
     response.raise_for_status()
     return response.json()
