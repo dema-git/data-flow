@@ -15,7 +15,8 @@
 # service layer modules, keeping API logic simple and clean.
 ################################################################################
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from api.auth import require_operational_api_token
 from minio_utils.files_handler import get_files_data, upload_batch, get_minio_manager
 from db_utils.helpers import process_records
 from db_utils.database import get_db_session
@@ -45,6 +46,7 @@ kafka_ctx = KafkaProducerContext()
 @router.get(
     "/etl/run-full",
     summary="Run the full ETL pipeline (Bronze → Silver → Gold → DB)",
+    dependencies=[Depends(require_operational_api_token)],
     description="""
     Runs one complete Medallion ETL cycle:
 
@@ -88,6 +90,7 @@ def run_full_etl():
 
 @router.get("/outbox/archive-run",
             summary="Run archive worker",
+            dependencies=[Depends(require_operational_api_token)],
             description="""
                 Processes pending outbox tasks and moves processed MinIO files
                 from active Medallion buckets to archive buckets.
@@ -110,6 +113,7 @@ def trigger_archive_worker():
 
 
 @router.get("/bronze-archive/cleanup", summary="Clean Bronze archive bucket",
+            dependencies=[Depends(require_operational_api_token)],
             description="""
             Deletes all objects from the Bronze archive bucket in MinIO after
             the archive retention step has completed.
@@ -132,6 +136,7 @@ def clear_bronze_archive():
 
 @router.get("/silver-archive/cleanup",
             summary="Clean Silver archive bucket",
+            dependencies=[Depends(require_operational_api_token)],
             description="""
             Deletes all objects from the Silver archive bucket in MinIO after
             the archive retention step has completed.
