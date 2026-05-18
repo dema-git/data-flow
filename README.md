@@ -1,252 +1,332 @@
-# Medallion ETL Pipeline — End-to-End Data Engineering Project
-Imagine you need a data platform that ingests events, cleans them, transforms them into analytical tables, archives the old data, and keeps everything observable.
-But you don’t want random scripts, cron jobs, or manual cleanup.
-You want a real pipeline — structured, automated, and production-like.
+# Medallion ETL Pipeline
 
+This project is a local data pipeline demo built around the Medallion pattern: **Bronze -> Silver -> Gold**.
 
-This project demonstrates exactly that.
-It implements a full Medallion Architecture (Bronze → Silver → Gold) with Airflow, Kafka, MinIO, FastAPI, and PostgreSQL.
-All parts work together to simulate a modern data engineering platform, with clear data lineage, lifecycle management, and observability.
+It generates synthetic user session events, sends them through Kafka, stores raw and processed Parquet files in MinIO, loads Gold-level analytical tables into PostgreSQL, and exposes a small operational UI through FastAPI.
 
-### It is designed to demonstrate a complete modern data engineering stack, including:
+The main goal of the project is to show how I structure a backend/data system when there is more than one moving part: ingestion, object storage, orchestration, metadata, retries, protected operational endpoints, tests, and CI.
 
-* Near-real-time ingestion (Kafka → Bronze)
-* Deterministic batch transformation (Silver)
-* Normalization into analytical tables (Gold)
-* Outbox tracking for observability & lineage
-* Automatic archival DAG (moving raw files)
-* Cleanup DAG (lifecycle management)
-* HTMX-driven monitoring UI
-* Fully structured JSON logging system
-  
-&nbsp;
+## Architecture
 
-## 📌 Architecture Overview
+![Architecture](readme_assets/data_flow_arch.png)
 
-![screenshot](readme_assets/data_flow_arch.png)
+Main services:
 
+- **FastAPI**: API, dashboard, background event generator, Kafka producer/consumer startup.
+- **Kafka**: transport for generated session events.
+- **MinIO**: object storage for Bronze, Silver, Gold, and archive buckets.
+- **Airflow**: runs ETL, archive, and cleanup DAGs.
+- **PostgreSQL**: stores Gold marts and pipeline metadata.
+- **Kafdrop / pgAdmin / MinIO Console**: local inspection tools.
+- **GitHub Actions**: runs the Docker-based test suite on push and PR.
 
-## What This Project Is and Why It Exists
+## Data Flow
 
-Many ETL examples are oversimplified: one script, one table, no lifecycle, no monitoring.
-This project intentionally models a real production-grade system:
+1. FastAPI starts a background generator.
+2. The generator creates fake user session events.
+3. Events are sent to Kafka.
+4. A consumer writes incoming events to Bronze Parquet files in MinIO.
+5. Airflow triggers the full ETL flow.
+6. Bronze files are transformed into Silver files.
+7. Silver files are transformed into two Gold datasets:
+   - `gold_page_views`
+   - `gold_product_events`
+8. Gold files are loaded into PostgreSQL.
+9. Processed files are registered in `pipeline.outbox_tasks`.
+10. Archive and cleanup DAGs move/remove files based on outbox state.
 
-Events flow into Kafka.
-* Airflow orchestrates multi-stage Medallion processing.
-* MinIO stores Bronze, Silver, Gold, and Archive layers.
-* FastAPI provides an operational UI and structured logging.
-* PostgreSQL stores normalized analytical tables + metadata (outbox pattern).
-* Separate DAGs handle ingestion, transformation, archiving, and cleanup.
+## Medallion Layers
 
-It’s built to be touched, extended, and understood — not to hide complexity.
+### Bronze
 
-&nbsp;
-# 🔶 Medallion Layers Overview
-### 🔵 Bronze — Raw Files
+Raw Kafka events are written to MinIO as Parquet files. The Bronze layer is append-only: raw data is not updated in place.
 
-Events arrive from Kafka and are saved into partitioned Parquet files in events-bronze.
-Nothing is mutated. Data is immutable, append-only.
+### Silver
 
-### 🟠 Silver — Cleaned & Standardized
+Bronze events are cleaned and normalized into a more consistent event shape. Silver still lives in MinIO, so intermediate data is not coupled to PostgreSQL.
 
-Airflow transforms Bronze files:
+### Gold
 
-* cleans fields
-* standardizes schemas
-* normalizes nested structures
-* outputs Silver parquet files
+Silver events are split into analytics-ready datasets:
 
-### 🟡 Gold — Analytical Tables
+- page views
+- product events
 
-Two analytical tables are produced:
+Gold data is then loaded into PostgreSQL tables used by the analytics endpoints.
 
-* gold_page_views
-* gold_product_events
+## Airflow DAGs
 
-Each transformation produces an outbox entry with:
+### Full ETL DAG
 
-* file name
-* bucket
-* row count
-* processing status
+Runs Bronze -> Silver -> Gold -> PostgreSQL.
 
-This metadata enables deterministic lifecycle management.
-
-
-## 📊 ETL Workflow Diagrams
-
----
-
-### Full ETL DAG (Bronze → Silver → Gold)
-Responsible for the entire transformation chain.
-
-1. Fetch all new Bronze parquet files
-2. Clean & transform to Silver format
-3. Normalize into 2 Gold analytical tables:
-      • gold_page_views
-      • gold_product_events
-4. Write metadata into outbox table:
-      - file_name
-      - bucket
-      - row_count
-      - status ("archived" after writing gold)
-5. Finish
-
-![screenshot](readme_assets/dag1.png)
-
----
+![Full ETL DAG](readme_assets/dag1.png)
 
 ### Archive DAG
-Moves already-processed files to archive storage.
 
-1. Read outbox where status="archived"
-2. Find matching files in Bronze/Silver/Gold buckets
-3. Move files to *archive* buckets
-4. Update outbox status → "done"
-5. Finish
+Reads pending outbox tasks and moves processed files from active buckets to archive buckets.
 
-![screenshot](readme_assets/dag2.png)
+![Archive DAG](readme_assets/dag2.png)
 
----
+### Cleanup DAGs
 
-### Clean DAGs
-Deletes files permanently after successful archival.
+Remove archived files from MinIO after the archive step.
 
-1. Read outbox where status="done"
-2. Find matching files in archive buckets
-3. Remove them permanently using MinIO API
-4. Finish
+![Cleanup DAG](readme_assets/dag3.png)
 
-![screenshot](readme_assets/dag3.png)
+## Dashboard
 
-&nbsp;
----
-### 🛡️ Run Tests
-```bash
-docker compose -f docker-compose.tests.yml up --build --exit-code-from api_tests
+The dashboard is available at:
+
+```text
+http://localhost:8000/
 ```
-&nbsp;
 
-## 🚀 Running Locally
+It shows:
+
+- Bronze / Silver / Gold file and row counts
+- Gold-level page view and product event counters
+- latest 5 ETL runs from `pipeline.etl_runs`
+- outbox task status counts
+- links to Swagger UI and ReDoc
+
+The dashboard uses HTMX to refresh live metrics without a full page reload.
+
+![Dashboard](readme_assets/dataflow_dashboard.png)
+
+## API Docs
+
+FastAPI docs:
+
+```text
+http://localhost:8000/docs
+http://localhost:8000/redoc
+```
+
+![Swagger UI](readme_assets/dataflow_swagger.png)
+
+The API is split into:
+
+- analytics endpoints
+- demo data inspection endpoints
+- operational ETL/archive/cleanup endpoints
+- dashboard partial endpoints
+
+## Protected Operational Endpoints
+
+Endpoints that can change pipeline state or delete files require a simple API token.
+
+Protected endpoints:
+
+- `GET /etl/run-full`
+- `GET /outbox/archive-run`
+- `GET /bronze-archive/cleanup`
+- `GET /silver-archive/cleanup`
+
+Token config:
+
+```env
+OPERATIONAL_API_TOKEN=change-me
+```
+
+Request header:
+
+```http
+X-API-Token: change-me
+```
+
+Example:
 
 ```bash
-docker compose \
-  -f docker-compose.infra.yml \
-  -f docker-compose.app.yml \
-  -f docker-compose.airflow.yml \
-  up -d --build
+curl -H "X-API-Token: change-me" http://localhost:8000/etl/run-full
 ```
-&nbsp;
 
+Without the header, or with a wrong token, the API returns `401`.
 
-## 🖥️ UI Preview
+This is not meant to be a full auth system. It is a small guard for local operational endpoints that should not be accidentally triggered from the browser or by unauthenticated clients.
 
-This project also includes an operational interface that makes it easy to explore the pipeline, inspect metrics, and interact with the API.
+## Local Setup
 
+Requirements:
 
-### 📘 Interactive API Documentation (Swagger UI) (/docs)
+- Docker
+- Docker Compose
+- Make
 
-FastAPI automatically generates interactive API documentation for all endpoints.
-This allows you to inspect schemas, execute requests, and understand the available API surface.
+Create the local env file:
 
+```bash
+cp .env.example .env
+```
 
-![screenshot](readme_assets/dataflow_swagger.png)
+Start everything:
 
-&nbsp;
+```bash
+make up
+```
 
-### 📊 Live Dashboard with HTMX (/)
+Check containers:
 
-The dashboard provides live Medallion pipeline metrics:
-Bronze / Silver / Gold row counts
-number of Parquet files per layer
-analytical counters (page views, product events)
-data refresh every 10 seconds via HTMX
-All metrics update automatically without reloading the page.
+```bash
+make ps
+```
 
-![screenshot](readme_assets/dataflow_dashboard.png)
-&nbsp;
+Useful local URLs:
 
-# 🧩 Key Design Principles
+```text
+FastAPI dashboard: http://localhost:8000/
+Swagger UI:        http://localhost:8000/docs
+Airflow:           http://localhost:8080/
+MinIO console:     http://localhost:9101/
+Kafdrop:           http://localhost:9000/
+pgAdmin:           http://localhost:8889/
+```
 
-This project follows a set of principles commonly used in production-grade data platforms:
+Follow logs:
 
-## 1. Immutable Raw Data (Bronze stays untouched)
+```bash
+make logs
+```
 
-* Raw events are never mutated or overwritten.
-* All transformations produce new files.
-* This ensures auditability, reproducibility, and safe re-processing.
+Stop containers:
 
-## 2. Deterministic, Idempotent Transformations
+```bash
+make down
+```
 
-Every step — Bronze → Silver → Gold — is designed so that:
+Clean local runtime state:
 
-* running the same transformation twice gives the same result
-* ingestion failure does not corrupt data
-* retries are safe
+```bash
+make clean CONFIRM=1
+```
 
-This mirrors real enterprise ETL reliability patterns.
+`make clean` removes Docker volumes and local runtime folders, so it requires `CONFIRM=1`.
 
-## 3. Clear Layer Separation (Medallion Architecture)
+## Makefile
 
-Each layer has a single responsibility:
+```text
+make up       Build and start the full local stack
+make ps       Show service status
+make logs     Follow logs for all services
+make test     Run the Docker test suite
+make down     Stop the local stack
+make clean    Stop stack and remove local runtime state
+```
 
-* Bronze → raw
-* Silver → cleaned, normalized
-* Gold → analytics-ready
+## Tests
 
-This keeps the pipeline clean, predictable, and easy to debug.
+Run tests:
 
-## 4. Explicit Metadata & Lineage (Outbox Pattern)
+```bash
+make test
+```
 
-Every processed file writes a metadata entry:
-* file name
-* row count
-* bucket
-* status
+The tests run in Docker through `docker-compose.tests.yml`.
 
-This allows Airflow to manage lifecycle DAGs deterministically and provides full transparency into data movement.
+Current tests cover:
 
-## 5. Storage-Based Workflow (Object Storage First)
+- database URL configuration
+- Kafka consumer configuration
+- MinIO manager behavior with dummy clients
+- Medallion idempotency checks
+- Gold loader duplicate-processing prevention
+- operational API token validation
 
-All intermediate results live in MinIO (S3-like storage).
-This avoids tight coupling with the database and improves scalability.
-Airflow moves files between buckets instead of relying solely on SQL.
+## CI
 
-## 6. Orchestration via Airflow, Not Scripts
+The GitHub Actions workflow runs on push and pull request to `main`.
 
-All workflows — ETL, archiving, cleanup — are explicitly defined in DAGs:
-* retry policy
-* dependencies
-* scheduling
-* monitoring
+It does four things:
 
-This makes the project closer to real-world production systems.
+1. checks that local `.env` files are not tracked
+2. creates `.env` from `.env.example`
+3. validates `docker-compose.tests.yml`
+4. runs `make test`
 
-## 7. Strong Observability (Grafana + Prometheus + Loki)
+Workflow file:
 
-The system emits structured JSON logs, Prometheus metrics, and Kafka metrics.
-Everything can be traced:
-* ingestion
-* transformation
-* errors
-* file movements
-* DAG runs
+```text
+.github/workflows/ci.yml
+```
 
-This level of observability is expected in modern data engineering.
+## Reliability Details
 
-## 8. Modular, Service-Oriented Architecture
+### Idempotency
 
-Each responsibility is isolated:
+The ETL code checks existing archive outbox records before processing files. This prevents the same active file from being processed twice if `/etl/run-full` is triggered again before the archive worker has moved it.
 
-* Airflow (orchestration)
-* FastAPI (operational UI + metadata)
-* MinIO (storage)
-* Kafka (events)
-* PostgreSQL (analytics storage)
+### ETL Run History
 
-This separation makes the project easy to extend and maintain.
+Each `/etl/run-full` call creates a row in `pipeline.etl_runs`.
 
-## 9. Dockerized for Full Reproducibility
+The dashboard shows the latest runs with:
 
-Every component — Airflow, Kafka, Connect, API, MinIO, DB — runs inside Docker.
-This guarantees a consistent environment across machines.
+- status
+- Bronze row count
+- Silver row count
+- Gold row count
+- loaded row count
+- start time
+
+### Outbox
+
+`pipeline.outbox_tasks` tracks file lifecycle work. Archive workers use it to decide which files should be moved and whether each task is `PENDING`, `IN_PROGRESS`, `DONE`, or `FAILED`.
+
+### Docker Build Context
+
+The repository includes `.dockerignore` so Docker builds do not receive `.git`, local env files, caches, logs, or local runtime data.
+
+## Main Endpoints
+
+Analytics:
+
+- `GET /analytics/top-landing-pages`
+- `GET /analytics/top-products`
+- `GET /analytics/ab-test-summary`
+- `GET /analytics/user/{user_id}/sessions`
+
+Demo data:
+
+- `GET /faker/sample-session`
+- `GET /faker/sample-batch`
+
+Operational:
+
+- `GET /etl/run-full`
+- `GET /outbox/archive-run`
+- `GET /bronze-archive/cleanup`
+- `GET /silver-archive/cleanup`
+
+Dashboard:
+
+- `GET /`
+- `GET /dashboard/metrics`
+- `GET /dashboard/operations`
+
+## What I Focused On
+
+- separating raw, cleaned, and analytical data layers
+- keeping intermediate data in object storage
+- making repeated ETL runs safe
+- tracking file lifecycle through an outbox table
+- exposing enough operational state in the dashboard
+- keeping operational endpoints protected
+- making local setup reproducible with Docker Compose and Make
+- covering important behavior with focused tests
+- running tests in CI
+
+## Limitations
+
+This is a local Docker Compose project. It is not a production deployment.
+
+Things I intentionally did not add:
+
+- Alembic migrations
+- full user auth / roles
+- production secrets management
+- distributed locking for multiple ETL workers
+- full end-to-end integration tests for the entire stack
+- real S3 lifecycle policies
+- deployment manifests
+
+For this project, I kept the scope around local reproducibility, pipeline behavior, and operational clarity.
