@@ -9,19 +9,27 @@
 # avoided in (production) environments. !!!
 ##########################################################
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from services.faker.generator import SessionEventFaker
 from services.faker.config import FakerConfig
 
 router = APIRouter(
     prefix="/faker",
-    tags=["faker"],
+    tags=["Faker"],
 )
 
 faker = SessionEventFaker(FakerConfig())
 
 
-@router.get("/sample-session")
+@router.get(
+    "/sample-session",
+    summary="Generate sample session events",
+    description=(
+        "Returns one synthetic user session as a list of events. "
+        "This endpoint is read-only and intended for inspecting the event "
+        "shape used by the Kafka producer and Medallion pipeline."
+    ),
+)
 def get_sample_session():
     """
     Generate a single user session (list of events) and return it
@@ -33,8 +41,19 @@ def get_sample_session():
     }
 
 
-@router.get("/sample-batch")
-def get_sample_batch(num_sessions: int = 3):
+@router.get(
+    "/sample-batch",
+    summary="Generate sample batch events",
+    description=(
+        "Returns synthetic events for multiple user sessions. "
+        "This endpoint is intended for demo and schema inspection only; "
+        "the running application generates pipeline input automatically."
+    ),
+)
+def get_sample_batch(
+        num_sessions: int = Query(3, ge=1, le=50,
+                                  description="Number of synthetic sessions to generate."),
+):
     """
     Generate multiple sessions and return them
     """

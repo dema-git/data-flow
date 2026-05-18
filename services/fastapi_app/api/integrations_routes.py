@@ -46,15 +46,17 @@ kafka_ctx = KafkaProducerContext()
     "/etl/run-full",
     summary="Run the full ETL pipeline (Bronze → Silver → Gold → DB)",
     description="""
-    Runs the complete Medallion ETL process:
+    Runs one complete Medallion ETL cycle:
 
     1. Reads Bronze files and converts them into Silver.
     2. Converts Silver records into Gold datasets.
     3. Loads Gold data into PostgreSQL analytical tables.
     4. Creates outbox tasks for archiving processed files.
+    5. Records the run in pipeline.etl_runs for dashboard history.
 
     This endpoint is called by an Airflow DAG.
-    Manual invocation should be performed **only in exceptional cases**, such as debugging or recovery.
+    Manual invocation should be performed **only in exceptional cases**,
+    such as debugging or recovery.
     
     WARNING: Manual execution may affect pipeline consistency.
     """
@@ -87,18 +89,19 @@ def run_full_etl():
 @router.get("/outbox/archive-run",
             summary="Run archive worker",
             description="""
-                Processes pending outbox tasks and moves MinIO files to archive buckets.
-                This endpoint is normally executed by an Airflow DAG.
+                Processes pending outbox tasks and moves processed MinIO files
+                from active Medallion buckets to archive buckets.
             
                 The worker:
-                - Reads pending tasks
-                - Moves files from main buckets to archive buckets
-                - Marks tasks as DONE or FAILED
+                - Reads PENDING or retryable FAILED archive tasks.
+                - Moves files from main buckets to archive buckets.
+                - Marks each task as DONE or FAILED.
                 
-                 This endpoint is called by an Airflow DAG.
-                 Manual invocation should be performed **only in exceptional cases**, such as debugging or recovery.
+                This endpoint is normally called by an Airflow DAG.
+                Manual invocation should be performed **only in exceptional cases**,
+                such as debugging or recovery.
                 
-                 WARNING: Manual execution may affect pipeline consistency.
+                WARNING: Manual execution may affect pipeline consistency.
                 """,
             )
 def trigger_archive_worker():
@@ -106,9 +109,10 @@ def trigger_archive_worker():
     return result
 
 
-@router.get("/bronze-archive/cleanup", summary="Clear Bronze archive bucket",
+@router.get("/bronze-archive/cleanup", summary="Clean Bronze archive bucket",
             description="""
-            Deletes all objects from the Bronze archive bucket in MinIO.
+            Deletes all objects from the Bronze archive bucket in MinIO after
+            the archive retention step has completed.
 
             This endpoint is intended to be triggered only by an Airflow DAG
             on a strictly defined schedule (fixed interval).
@@ -127,9 +131,10 @@ def clear_bronze_archive():
 
 
 @router.get("/silver-archive/cleanup",
-            summary="Clear Silver archive bucket",
+            summary="Clean Silver archive bucket",
             description="""
-            Deletes all objects from the Silver archive bucket in MinIO.
+            Deletes all objects from the Silver archive bucket in MinIO after
+            the archive retention step has completed.
             
             This endpoint is intended to be triggered only by an Airflow DAG
             on a strictly defined schedule (fixed interval).
