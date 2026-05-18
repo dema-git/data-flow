@@ -67,6 +67,22 @@
     </div>
 </section>
 
+    <!-- Operational overview -->
+    <section class="mb-4">
+        <div
+            id="operations-overview"
+            hx-get="/dashboard/operations"
+            hx-trigger="load, every 10s"
+            hx-swap="innerHTML"
+        >
+            <div class="card shadow-sm">
+                <div class="card-body py-3">
+                    <p class="text-muted mb-0 fs-6">Loading ETL activity…</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Pipeline description -->
     <section class="card shadow-sm">
         <div class="card-body small pipeline-list">

@@ -19,6 +19,10 @@ from services.medallion_pipeline.medallion_service import get_medallion_stats
 from fastapi.templating import Jinja2Templates
 from db_utils.database import get_db_session
 from services.faker.config import FakerConfig
+from services.medallion_pipeline.pipeline_state import (
+    fetch_latest_etl_runs,
+    fetch_outbox_status_counts,
+)
 
 router = APIRouter()
 
@@ -63,4 +67,22 @@ async def dashboard_metrics(request: Request):
     return templates.TemplateResponse(
         "partials/metrics_overview.html",
         {"request": request, "m": metrics},
+    )
+
+
+@router.get("/dashboard/operations", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard_operations(request: Request):
+    """
+    Recent ETL activity and outbox status for the dashboard.
+    """
+    latest_runs = fetch_latest_etl_runs(limit=5)
+    outbox_status = fetch_outbox_status_counts()
+
+    return templates.TemplateResponse(
+        "partials/operations_overview.html",
+        {
+            "request": request,
+            "latest_runs": latest_runs,
+            "outbox": outbox_status,
+        },
     )
