@@ -20,6 +20,33 @@ Main services:
 - **Kafdrop / pgAdmin / MinIO Console**: local inspection tools.
 - **GitHub Actions**: runs the Docker-based test suite on push and PR.
 
+## Project Structure
+
+```text
+.
+├── airflow/dags/                 # Airflow DAGs and shared HTTP client
+├── init-db/                      # Airflow/Postgres initialization files
+├── scripts/                      # Init scripts used by Docker services
+│   └── init/                     # PostgreSQL schema initialization
+├── services/
+│   ├── fastapi_app/              # FastAPI app, dashboard, API routes, ETL services
+│   ├── faker/                    # Synthetic event generator
+│   ├── kafka/                    # Kafka producer/consumer helpers
+│   ├── medallion_models/         # Bronze/Silver/Gold dataclasses and transforms
+│   ├── init-topic/               # Kafka topic initialization image
+│   └── minio-init/               # MinIO bucket initialization image
+├── tests/                        # Docker-based pytest suite
+├── readme_assets/                # README screenshots and diagrams
+├── docker-compose.infra.yml      # Kafka, MinIO, PostgreSQL, pgAdmin, Kafdrop
+├── docker-compose.app.yml        # FastAPI application service
+├── docker-compose.airflow.yml    # Airflow scheduler/webserver/api/dag-processor
+├── docker-compose.tests.yml      # Test runner compose file
+├── Makefile                      # Local developer commands
+└── .github/workflows/ci.yml      # GitHub Actions CI
+```
+
+Runtime folders such as `pgdata`, `minio-data`, and `shared_logs` are created locally and are not part of the source code.
+
 ## Data Flow
 
 1. FastAPI starts a background generator.
@@ -207,6 +234,84 @@ make clean CONFIRM=1
 ```
 
 `make clean` removes Docker volumes and local runtime folders, so it requires `CONFIRM=1`.
+
+## How to Verify Locally
+
+Use this flow when checking the project from a clean state:
+
+```bash
+cp .env.example .env
+make clean CONFIRM=1
+make up
+make ps
+```
+
+Expected result:
+
+- `api_app` is healthy on port `8000`
+- Kafka and MinIO are healthy
+- PostgreSQL is healthy on port `5444`
+- Airflow scheduler, webserver, API server, and DAG processor are healthy
+
+Check the dashboard and docs:
+
+```bash
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/openapi.json
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/dashboard/metrics
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/dashboard/operations
+```
+
+All four commands should return `200`.
+
+Check operational token protection:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/etl/run-full
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "X-API-Token: wrong-token" \
+  http://localhost:8000/etl/run-full
+curl -fsS \
+  -H "X-API-Token: medallion-ops-token" \
+  http://localhost:8000/etl/run-full
+```
+
+Expected result:
+
+- missing token returns `401`
+- wrong token returns `401`
+- correct token returns a JSON response with `run_id`
+
+Check that Airflow can call protected endpoints automatically:
+
+```bash
+docker exec data-flow-airflow-scheduler-1 printenv OPERATIONAL_API_TOKEN
+docker exec data-flow-airflow-scheduler-1 bash -lc \
+  "PYTHONPATH=/opt/airflow/dags python - <<'PY'
+from _shared.http_client import call_api
+result = call_api('/etl/run-full', timeout_s=1800)
+print(result['run_id'])
+PY"
+```
+
+The first command should print `medallion-ops-token`. The second command should print a new ETL `run_id`.
+
+Check the latest ETL runs in PostgreSQL:
+
+```bash
+docker exec data-flow-db-1 psql -U admin1 -d main -c \
+  "SELECT id, status, started_at FROM pipeline.etl_runs ORDER BY id DESC LIMIT 5;"
+```
+
+The same latest runs should be visible in the dashboard under `Latest ETL runs`.
+
+Finally, run tests:
+
+```bash
+make test
+```
+
+Expected result: all tests pass.
 
 ## Makefile
 
