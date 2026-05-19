@@ -237,81 +237,26 @@ make clean CONFIRM=1
 
 ## How to Verify Locally
 
-Use this flow when checking the project from a clean state:
+Short verification flow:
 
 ```bash
 cp .env.example .env
 make clean CONFIRM=1
 make up
 make ps
-```
-
-Expected result:
-
-- `api_app` is healthy on port `8000`
-- Kafka and MinIO are healthy
-- PostgreSQL is healthy on port `5444`
-- Airflow scheduler, webserver, API server, and DAG processor are healthy
-
-Check the dashboard and docs:
-
-```bash
-curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/
-curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/openapi.json
-curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/dashboard/metrics
-curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8000/dashboard/operations
-```
-
-All four commands should return `200`.
-
-Check operational token protection:
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/etl/run-full
-curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "X-API-Token: wrong-token" \
-  http://localhost:8000/etl/run-full
-curl -fsS \
-  -H "X-API-Token: medallion-ops-token" \
-  http://localhost:8000/etl/run-full
-```
-
-Expected result:
-
-- missing token returns `401`
-- wrong token returns `401`
-- correct token returns a JSON response with `run_id`
-
-Check that Airflow can call protected endpoints automatically:
-
-```bash
-docker exec data-flow-airflow-scheduler-1 printenv OPERATIONAL_API_TOKEN
-docker exec data-flow-airflow-scheduler-1 bash -lc \
-  "PYTHONPATH=/opt/airflow/dags python - <<'PY'
-from _shared.http_client import call_api
-result = call_api('/etl/run-full', timeout_s=1800)
-print(result['run_id'])
-PY"
-```
-
-The first command should print `medallion-ops-token`. The second command should print a new ETL `run_id`.
-
-Check the latest ETL runs in PostgreSQL:
-
-```bash
-docker exec data-flow-db-1 psql -U admin1 -d main -c \
-  "SELECT id, status, started_at FROM pipeline.etl_runs ORDER BY id DESC LIMIT 5;"
-```
-
-The same latest runs should be visible in the dashboard under `Latest ETL runs`.
-
-Finally, run tests:
-
-```bash
 make test
 ```
 
-Expected result: all tests pass.
+Then check:
+
+- dashboard opens at `http://localhost:8000/`
+- Swagger opens at `http://localhost:8000/docs`
+- protected operational endpoints return `401` without `X-API-Token`
+- protected operational endpoints work with `X-API-Token: medallion-ops-token`
+- Airflow DAGs can call protected endpoints through the shared HTTP client
+- latest ETL runs appear in the dashboard
+
+Detailed verification steps are in [docs/local-verification.md](docs/local-verification.md).
 
 ## Makefile
 
