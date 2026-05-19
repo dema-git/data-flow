@@ -28,7 +28,7 @@ def require_operational_api_token(
     """
     Validate the operational API token from the X-API-Token header.
     """
-    expected_token = os.getenv("OPERATIONAL_API_TOKEN", "change-me")
+    expected_token = os.getenv("OPERATIONAL_API_TOKEN", "medallion-ops-token")
 
     if not expected_token:
         raise HTTPException(

@@ -10,7 +10,7 @@ import requests
 
 
 API_BASE_URL = os.getenv("ETL_API_BASE_URL", "http://api_app:8000")
-OPERATIONAL_API_TOKEN = os.getenv("OPERATIONAL_API_TOKEN", "change-me")
+OPERATIONAL_API_TOKEN = os.getenv("OPERATIONAL_API_TOKEN", "medallion-ops-token")
 
 
 def call_api(path: str, timeout_s: int = 600) -> dict:

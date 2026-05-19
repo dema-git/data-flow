@@ -126,19 +126,19 @@ Protected endpoints:
 Token config:
 
 ```env
-OPERATIONAL_API_TOKEN=change-me
+OPERATIONAL_API_TOKEN=medallion-ops-token
 ```
 
 Request header:
 
 ```http
-X-API-Token: change-me
+X-API-Token: medallion-ops-token
 ```
 
 Example:
 
 ```bash
-curl -H "X-API-Token: change-me" http://localhost:8000/etl/run-full
+curl -H "X-API-Token: medallion-ops-token" http://localhost:8000/etl/run-full
 ```
 
 Without the header, or with a wrong token, the API returns `401`.
